@@ -1,0 +1,32 @@
+# Python bytecode, local environments, and packaging
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Python tooling and notebook caches
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.pytype/
+.hypothesis/
+.ipynb_checkpoints/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor and OS temporary files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.tmp
+*.bak
