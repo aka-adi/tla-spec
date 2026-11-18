@@ -8,9 +8,9 @@
 
 [查看规格](../spec/scalar.md#api-tla-exp)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+已记录开发分支的 FP32 标量实现。本轮按[转测范围](../spec/scalar.md#scalar-unary-test-scope)验证功能。
 
-结论：待决。
+结论：本轮范围已限定。标量展开应落在哪一层及性能验收待评审。
 
 <a name="scalar-011"></a>
 
@@ -18,9 +18,9 @@
 
 [查看规格](../spec/scalar.md#api-tla-log1p)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+已记录开发分支的 FP32 标量实现。本轮按[转测范围](../spec/scalar.md#scalar-unary-test-scope)验证功能，覆盖零附近精度、零的符号和 −1 附近的定义域边界。
 
-结论：待决。
+结论：本轮范围已限定。标量展开应落在哪一层及性能验收待评审。
 
 <a name="scalar-015"></a>
 
@@ -28,6 +28,6 @@
 
 [查看规格](../spec/scalar.md#api-tla-sigmoid)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+已记录开发分支的 FP32 标量实现。本轮按[转测范围](../spec/scalar.md#scalar-unary-test-scope)验证功能。
 
-结论：待决。
+结论：本轮范围已限定。随标量指数路径评审 lowering 归属和性能。
