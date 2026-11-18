@@ -2,6 +2,8 @@
 
 [返回接口目录](../README.md)
 
+以下 DMA、L0 搬运和填充约束面向 Ascend950（RegBase）。
+
 <a name="api-tla-alloc"></a>
 
 ## tla.alloc
@@ -118,30 +120,11 @@ def example(x_ub, y):
 
 签名：`tla.fill(dst, value)`
 
-返回：None。
-
-编译表示：hivm.hir.vbrc。
+返回：None。将标量广播到整个目标缓冲区，编译表示为标量 `hivm.hir.vbrc`。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `dst` | 目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B8：不支持<br>B16：bfloat16<br>B32：int32 / float32<br>B64：不支持 | 零 offset，连续 row-major。 | 必填 |
-| `value` | 输入值 | int / float / bool / 标量 tl.tensor | 可转换为 dst 元素类型的标量 | 向全部目标元素广播。 | 必填 |
+| `dst` | 待填充的缓冲区 | tla.buffer | UB；float32 / bfloat16 / int32；1D / 2D | 连续 row-major，offset=0，元素数为正且不超过 UB 容量；允许非对齐尾部。 | 必填 |
+| `value` | 广播标量 | int / float / 标量 tl.tensor | 可转换为目标元素类型的标量 | 不接受 bool 或块 tensor；int32 目标不接受浮点值，常量整数须位于 int32 范围。 | 必填 |
 
-**调用示例**
-
-out_ub 是符合约束的连续 UB 缓冲区。
-
-```python
-@tla.jit
-def example(out_ub):
-    tla.fill(out_ub, 0)
-```
-
-## 范围说明
-
-以下条目在当前整理表中没有可定位的 TLA 接口名。
-
-| 原序号 | 范围结论 | 涉及场景 |
-| --- | --- | --- |
-| 161 | 类似torch.tensor，workspace 明确不支持 | T.empty和tensor 有关的都疑似global |
-| 162 | 类似torch.tensor，workspace 明确不支持 | T.make_tensor 有关的都疑似global |
+不支持非零或动态偏移、带行间距的非连续视图及其他地址空间。标量按目标类型转换；调用方须确保生产、消费及复用缓冲区的依赖有正确同步。
