@@ -6,17 +6,17 @@
 
 ## tla.alloc
 
-签名：`tla.alloc(shape, dtype, space=None, versions=1, *, scope=None)`
+计划签名：`tla.alloc(shape, dtype, space=None)`
 
 返回：tla.buffer。
+
+分配由 `space` 指定地址空间。多缓冲版本数通过 [tla.annotate_multi_buffer](schedule.md#api-tla-annotate-multi-buffer) 单独标注。当前实现仍接收 `versions` 和 `scope`，签名变更见 [MEMORY-002](../tracking/memory.md#memory-002)。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `shape` | 逻辑形状 | tuple[int, ...] / list[int] | 非空正整数组 | 按元素计。 | 必填 |
 | `dtype` | 元素类型 | 编译期 tl.dtype | 可物化为 memref 元素的整数或浮点 dtype | 分配类型须同时满足该空间的内存规划和后续操作的 dtype 约束。 | 必填 |
-| `space` | 指定地址空间 | 编译期 tla.AddressSpace / str / None | 地址空间：UB / L1 / L0C（已确认分配路径） | 至多指定 space 或 scope 之一，均省略时为 UB。GM 禁止 alloc，L0A_SF/L0B_SF 无映射。其他有空间映射的名字不自动获得分配支持。 | None |
-| `versions` | 缓冲区版本数 | 编译期 int | 正整数 | 1 无多缓冲标记，>1 写入 hivm.multi_buffer。 | 1 |
-| `scope` | 指定执行域或地址空间 | 编译期 tla.AddressSpace / str / None | 地址空间：UB / L1 / L0C（已确认分配路径） | 至多指定 space 或 scope 之一，均省略时为 UB。GM 禁止 alloc，L0A_SF/L0B_SF 无映射。其他有空间映射的名字不自动获得分配支持。 | None |
+| `space` | 指定地址空间 | 编译期 tla.AddressSpace / str / None | 地址空间：UB / L1 / L0C（已确认分配路径） | 省略或传 None 时为 UB。GM 禁止 alloc，L0A_SF/L0B_SF 无映射。其他有空间映射的名字不自动获得分配支持。 | None |
 
 **调用示例**
 

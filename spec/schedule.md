@@ -3,49 +3,53 @@
 [返回接口目录](../README.md)
 
 <a name="api-tl-program-id"></a>
+<a name="api-tla-program-id"></a>
 
-## tl.program_id
+## tla.program_id
 
-签名：`tl.program_id(axis)`
+计划签名：`tla.program_id(axis)`
 
-返回：指定轴的程序实例编号。
+返回：指定轴的程序实例编号，为 int32 标量 tl.tensor。
 
-沿用 Triton 入口，适用场景仍受 TLA 编译路径和目标约束。
+目标沿用现有 `tl.program_id` 的轴语义。当前 TLA 内核仍使用 `tl.program_id`，新入口的实现见 [SCHEDULE-001](../tracking/schedule.md#schedule-001)。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `axis` | launch 网格轴 | 编译期 int | 0 / 1 / 2 | TLA adapter 映射到对应 grid 参数。 | 必填 |
 
-**调用示例**
+计划调用示例
 
 ```python
 @tla.jit
 def example():
-    block = tl.program_id(0)
+    block = tla.program_id(0)
 ```
 
-仓库测试：[tla_ut/vector/fused_weight.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/vector/fused_weight.py#L35)。
+现有 `tl.program_id` 路径的仓库测试：[tla_ut/vector/fused_weight.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/vector/fused_weight.py#L35)。
 
 <a name="api-tla-annotate-buffer-versions"></a>
+<a name="api-tla-annotate-multi-buffer"></a>
 
-## tla.annotate_buffer_versions
+## tla.annotate_multi_buffer
 
-签名：`tla.annotate_buffer_versions(buf, versions)`
+计划签名：`tla.annotate_multi_buffer(buf, versions)`
 
 返回：None。
+
+多缓冲版本数从 [tla.alloc](memory.md#api-tla-alloc) 的分配签名移到显式标注。当前实现入口为 `tla.annotate_buffer_versions`，计划沿用现有参数与行为，见 [SCHEDULE-002](../tracking/schedule.md#schedule-002)。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `buf` | 要标注的缓冲区 | tla.buffer | 可添加 annotation.mark 的 buffer | — | 必填 |
 | `versions` | 缓冲区版本数 | 编译期 int | 正整数 | 1 不添加版本标记，>1 添加 hivm.multi_buffer。 | 必填 |
 
-**调用示例**
+计划调用示例
 
 ```python
 @tla.jit
 def example():
     tile = tla.alloc((64,), tl.float32)
-    tla.annotate_buffer_versions(tile, 2)
+    tla.annotate_multi_buffer(tile, 2)
 ```
 
 ## 范围说明

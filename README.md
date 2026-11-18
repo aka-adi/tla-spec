@@ -10,6 +10,8 @@
 
 状态取值为待转测、不转测、转测中。已命名的条目初始标记待转测，其中提案或预留入口须先补齐实现。已有小测试表示存在参考用例，正式转测状态仍以首页为准。
 
+「不需要」表示已确认无需提供的接口，接口名保留删除线供追溯。计划中的签名和新入口以规格草案为准，源码列标明实现进度。
+
 日常更新只改对应位置：进度和分工在首页，接口约束在规格页，待决项与结论在跟踪页。评审确认后更新规格，并在问题页写明结论。
 
 <a name="cube-index"></a>
@@ -158,8 +160,8 @@
 | [tla.store_view](spec/dma.md#api-tla-store-view) | 待&#8288;转&#8288;测 | 拟写入 tensor_view 的指定分块 | [1&nbsp;项&#8288;待&#8288;决](tracking/dma.md#dma-009) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | Ricky | Ricky |
 | [tla.set_pad_value](spec/dma.md#api-tla-set-pad-value) | 待&#8288;转&#8288;测 | 拟单独设置 DMA 填充值。现有 LoadGM2UBParams.pad_value 按操作设置 | [1&nbsp;项&#8288;待&#8288;决](tracking/dma.md#dma-010) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 陈&#8288;相&#8288;廷 | Ricky |
 | [tla.set_post_copy](spec/dma.md#api-tla-set-post-copy) | 待&#8288;转&#8288;测 | 拟设置搬运后处理 | [1&nbsp;项&#8288;待&#8288;决](tracking/dma.md#dma-011) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 陈&#8288;相&#8288;廷 | Ricky |
-| [tla.stride_store](spec/dma.md#api-tla-stride-store) | 待&#8288;转&#8288;测 | 拟对缓冲区执行带步长的读写。当前可用 view/subview 表达部分切片，需按具体用法组合 | [1&nbsp;项&#8288;待&#8288;决](tracking/dma.md#dma-012) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | Ricky |
-| [tla.stride_load](spec/dma.md#api-tla-stride-load) | 待&#8288;转&#8288;测 | 拟对缓冲区执行带步长的读写。当前可用 view/subview 表达部分切片，需按具体用法组合 | [1&nbsp;项&#8288;待&#8288;决](tracking/dma.md#dma-013) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | Ricky |
+| [~~tla.stride_store~~](spec/dma.md#api-tla-stride-store) | 不&#8288;需&#8288;要 | 拟对缓冲区执行带步长的读写。当前可用 view/subview 表达部分切片，需按具体用法组合 | [已&#8288;关&#8288;闭](tracking/dma.md#dma-012) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | Ricky |
+| [~~tla.stride_load~~](spec/dma.md#api-tla-stride-load) | 不&#8288;需&#8288;要 | 拟对缓冲区执行带步长的读写。当前可用 view/subview 表达部分切片，需按具体用法组合 | [已&#8288;关&#8288;闭](tracking/dma.md#dma-013) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | Ricky |
 
 <a name="scalar-index"></a>
 
@@ -189,7 +191,7 @@
 
 | 接口 | 状态 | 用途 | 评审 | 源码 | 设计 | 实现 |
 | --- | :---: | --- | :---: | :---: | :---: | :---: |
-| [tla.alloc](spec/memory.md#api-tla-alloc) | 待&#8288;转&#8288;测 | 分配未初始化的片上连续缓冲区 | [1&nbsp;项&#8288;待&#8288;决](tracking/memory.md#memory-001) | [alloc.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/alloc.py#L27) | 刘&#8288;鹏&#8288;程 | Ricky |
+| [tla.alloc](spec/memory.md#api-tla-alloc) | 待&#8288;转&#8288;测 | 分配未初始化的片上连续缓冲区 | [2&nbsp;项&#8288;待&#8288;决](tracking/memory.md#memory-001) | [签&#8288;名&#8288;待&#8288;更&#8288;新](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/alloc.py#L27) | 刘&#8288;鹏&#8288;程 | Ricky |
 | [tla.reshape](spec/memory.md#api-tla-reshape) | 待&#8288;转&#8288;测 | 对连续缓冲区做零拷贝 reshape | 未&#8288;登&#8288;记 | [view.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/view.py#L184) | 刘&#8288;鹏&#8288;程 | Ricky |
 | [tla.view](spec/memory.md#api-tla-view) | 待&#8288;转&#8288;测 | 从指针或缓冲区构造共享底层存储的视图。指针源使用 hivm.hir.pointer_cast 与 memref.reinterpret_cast，buffer 源生成 memref.subview | 未&#8288;登&#8288;记 | [view.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/view.py#L130) | 刘&#8288;鹏&#8288;程 | Ricky |
 | [tla.subview](spec/memory.md#api-tla-subview) | 待&#8288;转&#8288;测 | 在已有缓冲区上构造同秩子视图 | 未&#8288;登&#8288;记 | [view.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/view.py#L105) | 刘&#8288;鹏&#8288;程 | Ricky |
@@ -216,8 +218,8 @@
 
 | 接口 | 状态 | 用途 | 评审 | 源码 | 设计 | 实现 |
 | --- | :---: | --- | :---: | :---: | :---: | :---: |
-| [tl.program_id](spec/schedule.md#api-tl-program-id) | 待&#8288;转&#8288;测 | 返回指定 launch 网格轴的当前 program ID | 未&#8288;登&#8288;记 | [core.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/python/triton/language/core.py#L1605) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
-| [tla.annotate_buffer_versions](spec/schedule.md#api-tla-annotate-buffer-versions) | 待&#8288;转&#8288;测 | 给缓冲区添加多缓冲版本数注解 | 未&#8288;登&#8288;记 | [aux_ops.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/aux_ops.py#L81) | 刘&#8288;鹏&#8288;程 | — |
+| [tla.program_id](spec/schedule.md#api-tla-program-id) | 待&#8288;转&#8288;测 | 返回指定 launch 网格轴的当前 program ID | [1&nbsp;项&#8288;待&#8288;决](tracking/schedule.md#schedule-001) | 待&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
+| [tla.annotate_multi_buffer](spec/schedule.md#api-tla-annotate-multi-buffer) | 待&#8288;转&#8288;测 | 给缓冲区添加多缓冲版本数注解 | [1&nbsp;项&#8288;待&#8288;决](tracking/schedule.md#schedule-002) | 待&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | — |
 
 <a name="language-index"></a>
 
@@ -226,9 +228,9 @@
 | 接口 | 状态 | 用途 | 评审 | 源码 | 设计 | 实现 |
 | --- | :---: | --- | :---: | :---: | :---: | :---: |
 | [tla.sqrt](spec/language.md#api-tla-sqrt) | 待&#8288;转&#8288;测 | 求标量平方根 | 未&#8288;登&#8288;记 | [math.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/math.py#L79) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
-| [tla.symbolic](spec/language.md#api-tla-symbolic) | 待&#8288;转&#8288;测 | 拟构造带名称的符号表达式。动态标量可由内核形参提供 | [1&nbsp;项&#8288;待&#8288;决](tracking/language.md#language-002) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | — |
+| [~~tla.symbolic~~](spec/language.md#api-tla-symbolic) | 不&#8288;需&#8288;要 | 拟构造带名称的符号表达式。动态标量可由内核形参提供 | [已&#8288;关&#8288;闭](tracking/language.md#language-002) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 刘&#8288;鹏&#8288;程 | — |
 | [tla.truncmod](spec/language.md#api-tla-truncmod) | 待&#8288;转&#8288;测 | 计算向零截断除法的余数 | 未&#8288;登&#8288;记 | [math.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/math.py#L49) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
-| [tl.assume](spec/language.md#api-tl-assume) | 待&#8288;转&#8288;测 | 向编译器承诺条件成立 | 未&#8288;登&#8288;记 | [core.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/python/triton/language/core.py#L2950) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
+| [tl.assume](spec/language.md#api-tl-assume) | 不&#8288;转&#8288;测 | 向编译器承诺条件成立 | 未&#8288;登&#8288;记 | [core.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/python/triton/language/core.py#L2950) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
 | [tla.where](spec/language.md#api-tla-where) | 待&#8288;转&#8288;测 | 根据标量条件或向量谓词做逐元素选择 | 未&#8288;登&#8288;记 | [selection.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/selection.py#L89) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
 
 <a name="dtype-index"></a>
