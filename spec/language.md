@@ -30,7 +30,7 @@ def example():
 
 ## tla.symbolic
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+范围结论：不需要。保留原提案供追溯。
 
 原始提案：`tla.symbolic(name: str, dtype: str = "int32") -> Expr`
 
