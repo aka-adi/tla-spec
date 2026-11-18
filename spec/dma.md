@@ -2,34 +2,32 @@
 
 [返回接口目录](../README.md)
 
+以下 DMA、L0 搬运和填充约束面向 Ascend950（RegBase）。
+
 <a name="api-tla-load-gm-to-l1"></a>
 
 ## tla.load_gm_to_l1
 
 签名：`tla.load_gm_to_l1(src, dst, params=None)`
 
-返回：None。
-
-编译表示：hivm.hir.nd2nz。
+返回：None。编译表示：`hivm.hir.nd2nz`。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 相同 dtype 和逻辑 tile。ND→NZ，普通模板 2D→4D。已注册的批量 3D→5D 路径不含 FP8。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：L1<br>数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 相同 dtype 和逻辑 tile。ND→NZ，普通模板 2D→4D。已注册的批量 3D→5D 路径不含 FP8。 | 必填 |
-| `params` | 控制搬运的配置 | tla.LoadGM2L1Params 或 None | None / tla.LoadGM2L1Params 实例 | None 创建默认配置。 | None |
-| `params.l2_cache_ctrl` | 原始 MTE2 缓存控制字段 | 编译期 int 或 None | None 或 −2³¹ 至 2³¹−1 | None 省略属性，硬件默认值为 0。编码域由目标决定。 | None |
-| `params.enable_nz2nd` | 预留的 NZ→ND 反向标记 | 编译期 bool | False | True 抛 NotImplementedError。 | False |
-| `params.enable_nz2dn` | 预留的 NZ→DN 反向标记 | 编译期 bool | False | True 抛 NotImplementedError。 | False |
+| `src` | 源 | tla.buffer | GM；float16 / bfloat16 | 2D ND，末维连续；行间距、偏移和范围须匹配底层分配。 | 必填 |
+| `dst` | 目的 | tla.buffer | L1；与 src 相同 | 4D NZ，与源逻辑矩阵一致。 | 必填 |
+| `params` | 搬运配置 | tla.LoadGM2L1Params / None | 下述配置 | None 等价于默认配置。 | None |
+| `params.enable_nd2nz` | 启用 ND→NZ 转换 | 编译期 bool | True | False 暂不支持并抛出 NotImplementedError；非 bool 抛出 TypeError。 | True |
 
-**调用示例**
+逻辑 M、N 为 16 的正整数倍，源和目的须满足 NZ 分块对齐且不越界；当前范围不包括尾块、3D→5D 批量和其他 dtype。
 
-x 为 ND float16 tile，dst_l1 为匹配的 NZ 缓冲区。
+约束：暂不支持手动设置 `l2_cache_ctrl` 和 `enable_dn2nz`。
 
 ```python
 @tla.jit
-def example(x, dst_l1):
+def example(src, dst):
     with tla.scope.cube():
-        tla.load_gm_to_l1(tla.view(x, (16, 16)), dst_l1)
+        tla.load_gm_to_l1(src, dst)
 ```
 
 仓库测试：[tla_ut/dma/nd2nz.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/nd2nz.py#L22)。
@@ -104,29 +102,26 @@ def example(src_ub, y):
 
 返回：None。
 
-编译表示：hivm.hir.l12l0。
-
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：L1<br>数据类型：待确认目标支持集合 | L12L0Op 校验地址空间并要求 6 个 i64 属性，ODS 未枚举元素类型。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：L0A / L0B<br>数据类型：待确认目标支持集合 | L12L0Op 校验地址空间并要求 6 个 i64 属性，ODS 未枚举元素类型。 | 必填 |
-| `params` | 控制搬运的配置 | tla.CopyL1ToL0Params 或 None | 有效调用须提供字段完整的 tla.CopyL1ToL0Params | 省略时创建的默认配置缺少硬件分块字段，会报错。 | None |
-| `params.is_transpose` | 开启 L1 至 L0 搬运的转置形式 | 编译期 bool | False / True | 该模式仍受目标和布局约束。 | False |
-| `params.actual_batch` | 原表中的真实 batch 数 | 编译期 int 或 None | None | 非 None 抛 NotImplementedError。 | None |
-| `params.k_part_idx` | 当前 K 分段编号 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。作为分段编号须与分区方案一致。 | None |
-| `params.k_part` | K 分区长度 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。长度及单位按 L12L0 分块协议。 | None |
-| `params.k_part_ceil` | 对齐后 K 分区长度 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。与 k_part 和物理 tile 一致。 | None |
-| `params.k_part_loop` | K 分区循环参数 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。 | None |
-| `params.k_part_actual` | 本分区实际 K 长度 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。不得读出有效 tile。 | None |
-| `params.m` | 原生 L12L0 的 M 维参数 | 编译期 int | 编译期整数；硬件有效范围待确认 | 调用时必填。须与目标分块匹配。 | None |
+| `src` | 待搬运的源缓冲区 | tla.buffer | L1；float16 / bfloat16 | 源视图描述所需矩阵分块，物理布局须与转置模式匹配。 | 必填 |
+| `dst` | 接收数据的目标缓冲区 | tla.buffer | L0A / L0B；与 src 相同 | 目标视图决定每块搬运范围；L0A 为 zN，L0B 为 nZ，地址及 offset 按 512B/fractal 对齐。 | 必填 |
+| `params` | 搬运配置 | tla.CopyL1ToL0Params 或 None | 仅包含 is_transpose | None 等价于使用默认配置。 | None |
+| `params.is_transpose` | 搬运时是否转置 | 编译期 bool | False / True | A、B 各自独立设置；转置选择须与源、目的布局匹配。 | False |
 
-共同约束：L12L0Op 将源限定为 L1，目的限定为 L0A 或 L0B。TableGen 中的分段字段是 i64 属性，字段编码宽度不能作为硬件可执行范围。
+搬运范围、步长及起始位置由源、目的 buffer 视图的形状、布局、stride 和 offset 描述；分块由调用方准备相应视图，无需额外传递分区字段或矩阵维度。
+
+约束：每次调用仅处理单 batch，不提供批量搬运配置。源、目的使用相容的 4D 物理布局，FP16/BF16 的内层为 (16,16)；地址范围不得越界，且不得超过 L0A/L0B 各 64KiB 的容量。调用方负责 MTE2→MTE1→M 的依赖及缓冲区复用生命周期。
+
+约束：暂不支持其他数据类型、布局及自动补齐尾块。
 
 仓库 IR 构造用例：[tla_ut/dma/copy.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/copy.py#L42)。
 
 <a name="api-tla-make-partition-view"></a>
 
 ## tla.make_partition_view
+
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -136,6 +131,8 @@ def example(src_ub, y):
 
 ## tla.make_strided_view
 
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
 原始提案：`make_strided_view( base: tla.buffer (ptr), shape: list[int], strides: list[int], tile_shape: list[int], dim_map: list[int], padding_value: enum<zero,nan,inf,-inf>, traversal_strides: list[int] )-> tla.tensor_view`
@@ -143,6 +140,8 @@ def example(src_ub, y):
 <a name="api-tla-make-gather-scatter-view"></a>
 
 ## tla.make_gather_scatter_view
+
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -152,6 +151,8 @@ def example(src_ub, y):
 
 ## tla.load_view
 
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
 原始提案：`load_view( src: tla.tensor_view, dst: tla.buffer, tile: list[list[int]] ) 只用于vector kernel`
@@ -159,6 +160,8 @@ def example(src_ub, y):
 <a name="api-tla-store-view"></a>
 
 ## tla.store_view
+
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -168,6 +171,8 @@ def example(src_ub, y):
 
 ## tla.set_pad_value
 
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
 原始提案：`set_pad_value()`
@@ -175,6 +180,8 @@ def example(src_ub, y):
 <a name="api-tla-set-post-copy"></a>
 
 ## tla.set_post_copy
+
+**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
