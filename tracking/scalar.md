@@ -91,3 +91,13 @@
 依据：[入口契约](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/scalar.py#L74) 限定 NONE 下单 NaN 暂不支持、ALL 传播任一输入的 NaN；[设备用例](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/minimum.py#L115) 仍排除双 NaN，并留有目标结果的 TODO。
 
 结论：已修订 NaN 策略及原始 FP16/BF16 操作数的拒绝约束；双 NaN 的目标支持待决。
+
+<a name="scalar-016"></a>
+
+## SCALAR-016 · tl.constexpr
+
+[查看规格](../spec/scalar.md#api-tl-constexpr)
+
+- 内核参数可用 `tl.constexpr` 标注，该入口直接沿用 Triton，TLA 未提供额外语义。
+
+结论：已关闭。确认不需要此接口，退出规格范围。

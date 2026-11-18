@@ -190,6 +190,32 @@ def example(x: tl.float32):
 
 仓库测试：[tla_ut/scalar/clamp.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/clamp.py#L46)。
 
+<a name="api-tl-constexpr"></a>
+
+## tl.constexpr
+
+范围结论：不需要。保留原提案供追溯。
+
+签名：`tl.constexpr`
+
+返回：用于表示编译期值的类型，可用于内核参数标注。
+
+沿用 Triton 入口，适用场景仍受 TLA 编译路径和目标约束。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `value` | 编译期值 | Python 对象 | 具体范围由使用该值的表达式决定 | 不作为设备运行时 SSA 参数。 | 必填 |
+
+**调用示例**
+
+```python
+@tla.jit
+def example(size: tl.constexpr):
+    tile = tla.alloc((size,), tl.float32)
+```
+
+仓库测试：[tla_ut/scope/gm2l1.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/gm2l1.py#L22)。
+
 <a name="api-tla-infinity"></a>
 
 ## tla.infinity
