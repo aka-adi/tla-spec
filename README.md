@@ -135,7 +135,7 @@
 
 | 接口 | 状态 | 用途 | 评审 | 源码 | 设计 | 实现 |
 | --- | :---: | --- | :---: | :---: | :---: | :---: |
-| [tla.device_assert](spec/dfx.md#api-tla-device-assert) | 待&#8288;转&#8288;测 | 在启用调试时生成设备端断言 | [2&nbsp;项&#8288;待&#8288;决](tracking/dfx.md#dfx-001) | [debug.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/debug.py#L115) | 高&#8288;威 | 高&#8288;威 |
+| [tla.device_assert](spec/dfx.md#api-tla-device-assert) | 不&#8288;转&#8288;测 | 在启用调试时生成设备端断言 | [2&nbsp;项&#8288;待&#8288;决](tracking/dfx.md#dfx-001) | [debug.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/debug.py#L115) | 高&#8288;威 | 高&#8288;威 |
 | [tla.device_print](spec/dfx.md#api-tla-device-print) | 待&#8288;转&#8288;测 | 打印设备端标量或缓冲区 | 未&#8288;登&#8288;记 | [debug.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/debug.py#L98) | 高&#8288;威 | 高&#8288;威 |
 
 <a name="dma-index"></a>
