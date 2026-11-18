@@ -79,6 +79,34 @@ def example(x):
     tl.assume(x >= 0)
 ```
 
+<a name="api-tla-where"></a>
+
+## tla.where
+
+范围结论：不需要。与 [tla.select](scalar.md#api-tla-select) 功能重叠，保留原提案供追溯。
+
+签名：`tla.where(condition, x, y)`
+
+返回：与所选标量或向量路径对应的结果。
+
+编译表示：hivm.hir.vsel。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `condition` | 选择条件 | 编译期 bool / 标量 int1 tl.tensor / tla.vector（int1 谓词） | 标量：int1<br>SIMD：同 lanes 的 int1 谓词 | 运行时标量条件只选择标量分支。 | 必填 |
+| `x` | 输入值 | bool / int / float / 标量 tl.tensor / tla.vector | 标量：bool / 数值标量<br>SIMD：同 dtype、同 lanes 的一对向量 | 两分支均提前求值。 | 必填 |
+| `y` | 条件为假时选择的值 | bool / int / float / 标量 tl.tensor / tla.vector | 标量：bool / 数值标量<br>SIMD：同 dtype、同 lanes 的一对向量 | 两分支均提前求值。 | 必填 |
+
+**调用示例**
+
+```python
+@tla.jit
+def example(x):
+    value = tla.where(x > 0, x, 0)
+```
+
+仓库测试：[tla_ut/simd/add_cmp.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/add_cmp.py#L114)。
+
 ## 范围说明
 
 以下条目在当前整理表中没有可定位的 TLA 接口名。
