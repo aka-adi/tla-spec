@@ -2,6 +2,33 @@
 
 [返回接口目录](../README.md)
 
+<a name="dma-refresh-baseline"></a>
+
+GM↔UB 依据库上已有接口，以及 2026-11-18 的 `tla-programming-api.md` §4.1.2、§4.2.2、§4.3.1 及 `affinity-ir-contract.md` §2.6、§2.12 修订。后端核对范围为 Ascend950、NPUIR `65e061b2404c8808ead47d9a6be95e102c28c3c0`。
+
+<a name="dma-002"></a>
+
+## DMA-002 · tla.load_gm_to_ub
+
+[查看规格](../spec/dma.md#api-tla-load-gm-to-ub)
+
+- 执行域检查：wrapper 尚无统一 core/VF guard，须与 Vector 核级、VF 外契约一致；早期 IR 接受不作为合法目标用法。
+- 缓存策略范围：NORMAL_FV/NORMAL_LV 桥接 HIVM 的 EvictFirst/EvictLast，普通 1D/2D DMA 编码为 0/1；被测 scalar fallback 使用相同 LD_IO 序列，不表达该 DMA 策略；3D 转置 NDDMA 样本固定编码 0，NORMAL_LV 未保留。完整 L2 配置与其他路由的透传范围待确认。
+- dtype 与布局：int1 / float8e4m3fn / float8e5m2 及其他 dtype、布局组合的目标支持边界待确认。
+
+结论：公开规格及示例已刷新，移除显式 padding 和旧缓存入口，仅保留 `l2_cache_ctrl`。上述 3 项待决；固有 32B 补齐是已确认的硬件使用约束，容量、别名和同步须覆盖完整物理写入范围。
+
+<a name="dma-003"></a>
+
+## DMA-003 · tla.store_ub_to_gm
+
+[查看规格](../spec/dma.md#api-tla-store-ub-to-gm)
+
+- 执行域检查：wrapper 尚无统一 core/VF guard，须与 Vector 核级、VF 外契约一致；默认核内同步不代替显式核间协议。
+- dtype 与布局：各 dtype、stride、offset、fallback 及原子写回的组合约束待确认。
+
+结论：签名仅接收 src、dst，无配置对象或随路原子属性；copy 的 UB→GM 分发仅接受 `params=None`。原子模式由独立 [set_atomic](scalar.md#scalar-001) 控制，写回完成后显式 NONE 复位。上述 2 项待决。
+
 <a name="dma-004"></a>
 
 ## DMA-004 · tla.copy_l1_to_l0
@@ -74,7 +101,7 @@
 
 - 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
 
-结论：已关闭。本轮不需要，待补齐实现后另行评审。
+结论：已关闭。本轮不需要。当前 GM→UB 不提供显式 padding，不以旧版 `LoadGM2UBParams.pad_value` 作为实现依据；待补齐实现后另行评审。
 
 <a name="dma-011"></a>
 

@@ -2,6 +2,8 @@
 
 [返回接口目录](../README.md)
 
+数值输入仅支持标量。以下示例中的标量计算放在 SIMD VF 外。参考版本的执行域检查范围见[评审说明](../tracking/scalar.md#scalar-version-scope)。
+
 <a name="api-tla-set-atomic"></a>
 
 ## tla.set_atomic
@@ -14,17 +16,28 @@
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `kind` | 原子更新操作 | 编译期 tla.AtomicKind | NONE / ADD / MAX / MIN | NONE 恢复普通存储模式。 | 必填 |
-| `dtype` | 元素类型 | 编译期 tl.dtype | 数据类型：<br>B8：int8<br>B16：int16 / float16 / bfloat16<br>B32：int32 / float32<br>B64：不支持 | — | 必填 |
+| `kind` | 原子更新操作 | 编译期 tla.AtomicKind | NONE / ADD / MAX / MIN | 必须使用枚举对象，不接受字符串或其余 AtomicKind 成员。NONE 恢复普通存储模式。 | 必填 |
+| `dtype` | 元素类型 | 编译期 tl.dtype | 数据类型：<br>B8：int8<br>B16：int16 / float16 / bfloat16<br>B32：int32 / float32<br>B64：不支持 | 须与实际原子写回的元素类型一致，不执行类型转换。NONE 仍须传入合法 dtype。 | 必填 |
+
+该调用设置执行核后续相关 GM 写回的控制状态，不绑定某个目的 Buffer，也不只作用于下一次 store。模式须显式修改或用 NONE 复位，不会随 Python scope 自动恢复。ADD、MAX、MIN 分别将写入值与 GM 目标的原值相加、取较大值、取较小值；调用者须提供有效的目标初值。
+
+约束：本接口不执行搬运、不返回旧值，也不承担 DMA 完成等待或核间同步。[store_ub_to_gm](dma.md#api-tla-store-ub-to-gm) 仅接收源和目标，原子模式由本接口独立控制。切换模式前须保证相关写回完成，并在原子写回完成后显式用 NONE 复位。
 
 **调用示例**
 
+前提：`x`、`y` 均指向连续的 64 个 float32 元素，`y` 已初始化；使用显式 PIPE.ALL 同步。
+
 ```python
 @tla.jit
-def example(src_ub, y):
-    tla.set_atomic(tla.AtomicKind.ADD, tl.float32)
-    tla.store_ub_to_gm(src_ub, tla.view(y, (64,)))
-    tla.set_atomic(tla.AtomicKind.NONE, tl.float32)
+def example(x, y):
+    ub = tla.alloc((64,), tl.float32)
+    with tla.scope.vector():
+        tla.load_gm_to_ub(tla.view(x, (64,)), ub)
+        tla.sync.barrier(tla.sync.PIPE.ALL)
+        tla.set_atomic(tla.AtomicKind.ADD, tl.float32)
+        tla.store_ub_to_gm(ub, tla.view(y, (64,)))
+        tla.sync.barrier(tla.sync.PIPE.ALL)
+        tla.set_atomic(tla.AtomicKind.NONE, tl.float32)
 ```
 
 仓库测试：[tla_ut/dma/set_atomic.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/set_atomic.py#L35)。
@@ -35,13 +48,15 @@ def example(src_ub, y):
 
 签名：`tla.select(condition, true_value, false_value)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：按条件选出的数值标量，类型由两个分支按 Triton 规则提升后决定。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `condition` | 选择条件 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 tensor。 | 必填 |
-| `true_value` | 条件为真时选取的值 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 tensor。 | 必填 |
-| `false_value` | 条件为假时选取的值 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 tensor。 | 必填 |
+| `condition` | 选择条件 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。 | 必填 |
+| `true_value` | 条件为真时选取的值 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。 | 必填 |
+| `false_value` | 条件为假时选取的值 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。 | 必填 |
+
+两个分支表达式都会在选择前求值，未选中的分支也须满足类型约束。不能用 `select` 保护越界访存或副作用；需要条件执行时使用显式控制流。
 
 **调用示例**
 
@@ -51,7 +66,7 @@ def example(x):
     value = tla.select(x > 0, x, 0)
 ```
 
-仓库测试：[tla_ut/scalar/scalar_frontend_contract.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/scalar_frontend_contract.py#L48)。
+仓库测试：[tla_ut/scalar/select.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/select.py#L35)。
 
 <a name="api-tla-abs"></a>
 
@@ -59,11 +74,13 @@ def example(x):
 
 签名：`tla.abs(x)`
 
-返回：与所选标量或向量路径对应的结果。
+返回：绝对值标量。运行时输入保持原 dtype；Python 标量按 Triton 规则转换为标量值。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `x` | 输入值 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 tensor。 | 必填 |
+| `x` | 输入值 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 不接受 bfloat16、float64、float8、Block、Buffer、Buffer 访存位置或 SIMD 寄存器。 | 必填 |
+
+bool 和无符号整数保持不变。有符号最小整数的结果仍为该固定宽度的最小值，不饱和也不扩宽。浮点绝对值清除符号位，包括负零、无穷和 NaN；不保证保留 NaN payload。该接口不隐式读取 Buffer、分配 Buffer 或广播到 SIMD 寄存器。
 
 **调用示例**
 
@@ -72,6 +89,8 @@ def example(x):
 def example(x):
     value = tla.abs(x)
 ```
+
+仓库测试：[tla_ut/scalar/abs.py](https://github.com/triton-lang/triton-ascend/blob/33819a5b6a9bb503e46da2a6e5962f0cd0c44393/third_party/ascend/unittest/tla_ut/scalar/abs.py#L36)。
 
 <a name="api-xor"></a>
 
@@ -83,8 +102,8 @@ def example(x):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | int / 标量整数 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 对整数位模式做 XOR，类型提升遵循 Triton。 | 必填 |
-| `rhs` | 右操作数 | int / 标量整数 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 对整数位模式做 XOR，类型提升遵循 Triton。 | 必填 |
+| `lhs` | 左操作数 | 整数标量 | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 对整数位模式做 XOR，类型提升遵循 Triton。 | 必填 |
+| `rhs` | 右操作数 | 整数标量 | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 对整数位模式做 XOR，类型提升遵循 Triton。 | 必填 |
 
 **调用示例**
 
@@ -100,11 +119,11 @@ def example(x, y):
 
 签名：`tla.cast(input, dtype, fp_downcast_rounding=None, bitcast=False)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：目标 `dtype` 的标量。`bitcast=False` 作数值转换，`bitcast=True` 重解释等宽位模式。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `input` | 待转换的标量 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 tensor。 | 必填 |
+| `input` | 待转换的标量 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。 | 必填 |
 | `dtype` | 元素类型 | 编译期 tl.dtype | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 不接受 bfloat16。按源和目标类型对执行 Triton cast。 | 必填 |
 | `fp_downcast_rounding` | 浮点窄化舍入模式 | 编译期 str 或 None | None / rtne / rtz | 仅用于 Triton 支持的浮点窄化类型对。 | None |
 | `bitcast` | 是否按位重解释 | 编译期 bool | False / True | True 需要等位宽。 | False |
@@ -117,7 +136,7 @@ def example(x):
     value = tla.cast(x, tl.int32)
 ```
 
-仓库测试：[tla_ut/scalar/cdiv.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/cdiv.py#L40)。
+仓库测试：[tla_ut/scalar/cast.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/cast.py#L40)。
 
 <a name="api-tla-cdiv"></a>
 
@@ -129,8 +148,8 @@ def example(x):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `x` | 输入值 | int / 标量整数 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 面向非负被除数、正除数的常规用法，中间计算不能溢出。 | 必填 |
-| `div` | 除数 | int / 标量整数 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 面向非负被除数、正除数的常规用法，中间计算不能溢出。 | 必填 |
+| `x` | 输入值 | 整数标量 | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 面向非负被除数、正除数的常规用法，中间计算不能溢出。 | 必填 |
+| `div` | 除数 | 整数标量 | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 面向非负被除数、正除数的常规用法，中间计算不能溢出。 | 必填 |
 
 **调用示例**
 
@@ -148,70 +167,28 @@ def example(x):
 
 签名：`tla.clamp(x, min, max, propagate_nan=tl.PropagateNan.NONE)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：限制在 `[min, max]` 内的标量，类型为三个输入共同提升后的浮点类型。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `x` | 输入值 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `min` | 下界 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `max` | 上界 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | ALL 传播 NaN。NONE 的目标 NaN 行为应按单 NaN 和双 NaN 分别验证。 | tl.PropagateNan.NONE |
+| `x` | 输入值 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
+| `min` | 下界 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。不得为 NaN，且须满足 min ≤ max。 | 必填 |
+| `max` | 上界 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。不得为 NaN，且须满足 min ≤ max。 | 必填 |
+| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | 仅作用于 x。NONE 下 NaN x 暂不支持；ALL 传播 x 的 NaN。 | tl.PropagateNan.NONE |
+
+约束：三个输入须共同形成浮点计算，全部为整数或 bool 的组合不支持。整数或 bool 可与本表允许的浮点输入混合，按 Triton 规则提升；每个原始输入均拒绝 float16 和 bfloat16。
+
+任一上下界为 NaN 或 `min > max` 时行为未定义，ALL 不改变该约束。调用者须保证运行时输入合法，接口不插入运行时 NaN 或边界检查。
 
 **调用示例**
 
 ```python
 @tla.jit
-def example(x):
-    value = tla.clamp(x, 0, 255)
+def example(x: tl.float32):
+    value = tla.clamp(x, 0.0, 255.0)
 ```
 
 仓库测试：[tla_ut/scalar/clamp.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/clamp.py#L46)。
-
-<a name="api-tl-constexpr"></a>
-
-## tl.constexpr
-
-签名：`tl.constexpr`
-
-返回：用于表示编译期值的类型，可用于内核参数标注。
-
-沿用 Triton 入口，适用场景仍受 TLA 编译路径和目标约束。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `value` | 编译期值 | Python 对象 | 具体范围由使用该值的表达式决定 | 不作为设备运行时 SSA 参数。 | 必填 |
-
-**调用示例**
-
-```python
-@tla.jit
-def example(size: tl.constexpr):
-    tile = tla.alloc((size,), tl.float32)
-```
-
-仓库测试：[tla_ut/scope/gm2l1.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/gm2l1.py#L22)。
-
-<a name="api-tla-exp"></a>
-
-## tla.exp
-
-签名：`tla.exp(x)`
-
-返回：e 的 x 次方，为 FP32 标量。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `x` | 要计算指数的标量。 | 标量 tl.tensor / Python float | 数据类型：float32 | tensor 的秩为 0；Python float 及其 tl.constexpr 包装按 float32 处理。 | 必填 |
-
-正无穷得到正无穷，负无穷得到零，NaN 返回 NaN。 本轮按[标量数学函数转测范围](#scalar-unary-test-scope)验收。
-
-调用示例
-
-```python
-@tla.jit
-def example(x):
-    y = tla.exp(x)
-```
 
 <a name="api-tla-infinity"></a>
 
@@ -219,7 +196,7 @@ def example(x):
 
 签名：`tla.infinity(dtype)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：指定 `dtype` 的正无穷标量常量。负无穷可用一元负号构造。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -235,41 +212,21 @@ def example():
 
 仓库测试：[tla_ut/scalar/infinity.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/infinity.py#L40)。
 
-<a name="api-tla-log1p"></a>
-
-## tla.log1p
-
-签名：`tla.log1p(x)`
-
-返回：ln(1+x)，为 FP32 标量。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `x` | 加一前的标量。 | 标量 tl.tensor / Python float | 数据类型：float32 | tensor 的秩为 0；Python float 及其 tl.constexpr 包装按 float32 处理。 | 必填 |
-
-x 等于 −1 时返回负无穷，x 小于 −1 时返回 NaN。正无穷返回正无穷，NaN 返回 NaN。保留零的符号。 本轮按[标量数学函数转测范围](#scalar-unary-test-scope)验收。
-
-调用示例
-
-```python
-@tla.jit
-def example(x):
-    y = tla.log1p(x)
-```
-
 <a name="api-tla-maximum"></a>
 
 ## tla.maximum
 
 签名：`tla.maximum(a, b, propagate_nan=tl.PropagateNan.NONE)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：两个标量的较大值，类型由操作数按 Triton 规则提升后决定；该接口不执行归约。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `a` | 第一个操作数 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `b` | 第二个操作数 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | ALL 传播 NaN。NONE 的目标 NaN 行为应按单 NaN 和双 NaN 分别验证。 | tl.PropagateNan.NONE |
+| `a` | 第一个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
+| `b` | 第二个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
+| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | NONE 下恰有一个输入为 NaN 的组合暂不支持；ALL 的语义是传播任一输入的 NaN。 | tl.PropagateNan.NONE |
+
+约束：float16 和 bfloat16 在类型提升前按原始操作数检查。双 NaN 的目标支持范围见[待决项](../tracking/scalar.md#scalar-012)。
 
 **调用示例**
 
@@ -287,7 +244,7 @@ def example(x, y):
 
 签名：`tla.max_value(dtype)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：指定 `dtype` 的最大有限值标量常量；整数返回该类型的上界。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -309,13 +266,15 @@ def example():
 
 签名：`tla.minimum(a, b, propagate_nan=tl.PropagateNan.NONE)`
 
-返回：计算结果，类型由操作数或显式 dtype 决定。
+返回：两个标量的较小值，类型由操作数按 Triton 规则提升后决定；该接口不执行归约。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `a` | 第一个操作数 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `b` | 第二个操作数 | bool / int / float / 标量 tl.tensor | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 tensor。 | 必填 |
-| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | ALL 传播 NaN。NONE 的目标 NaN 行为应按单 NaN 和双 NaN 分别验证。 | tl.PropagateNan.NONE |
+| `a` | 第一个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
+| `b` | 第二个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
+| `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | NONE 下恰有一个输入为 NaN 的组合暂不支持；ALL 的语义是传播任一输入的 NaN。 | tl.PropagateNan.NONE |
+
+约束：float16 和 bfloat16 在类型提升前按原始操作数检查。双 NaN 的目标支持范围见[待决项](../tracking/scalar.md#scalar-014)。
 
 **调用示例**
 
@@ -326,44 +285,3 @@ def example(x, y):
 ```
 
 仓库测试：[tla_ut/scalar/minimum.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scalar/minimum.py#L43)。
-
-<a name="api-tla-sigmoid"></a>
-
-## tla.sigmoid
-
-签名：`tla.sigmoid(x)`
-
-返回：1/(1+exp(−x))，为 FP32 标量。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `x` | 要变换的标量。 | 标量 tl.tensor / Python float | 数据类型：float32 | tensor 的秩为 0；Python float 及其 tl.constexpr 包装按 float32 处理。 | 必填 |
-
-x 等于零时返回 0.5。正无穷和负无穷分别返回 1 和 0，NaN 返回 NaN。 本轮按[标量数学函数转测范围](#scalar-unary-test-scope)验收。
-
-调用示例
-
-```python
-@tla.jit
-def example(x):
-    y = tla.sigmoid(x)
-```
-
-<a name="scalar-unary-test-scope"></a>
-
-## 标量数学函数转测范围
-
-本轮覆盖 Ascend 950PR 上的 TLA 标量 FP32 功能。运行时输入和返回值都是 FP32 标量，Triton 前端用秩为 0 的 `tl.tensor` 表示。编译期 Python 浮点数按 FP32 验证 IR。实机用例通过单个 `@tla.jit` kernel 验证运行时标量，SIMD 写回只用于读取计算结果。
-
-| 接口 | 正向用例 |
-| --- | --- |
-| `tla.exp` | 常规正负值、零、FP32 上溢和下溢边界、正负无穷、NaN |
-| `tla.log1p` | 接近零的正负值、正零和负零的符号、范围缩减切换点、−1 附近、−1、低于 −1、较大正值、正负无穷、NaN |
-| `tla.sigmoid` | 常规正负值、大幅值正负输入、零、正负无穷、NaN |
-
-- 验收覆盖适配器 IR、结果秩与类型、设备编译和数值结果。负向抽测 bool、int、非 FP32 标量 tensor 和块 tensor，预期前端报 TypeError。数值对照 PyTorch FP32，同位置 NaN 视为匹配。验收容差为 `rtol=1e-5`、`atol=2**-126`。绝对容差允许目标对次正规结果冲零。`log1p(±0)` 另核对零的符号。
-- 本轮范围外包括其他 dtype、块张量和 SIMD 向量的正向用例，以及 SIMT 和其他芯片。原生单指令映射、性能指标和 ULP 误差上限留待单独评审。
-
-参考实现见 [triton-ascend PR #3268](https://github.com/triton-lang/triton-ascend/pull/3268)。用 Ascend 950PR、`2aa6cc727` wheel 和该 PR 改动验证了三项接口，15 项检查全部通过。转测进度见首页。
-
-实现路径：`tla/scalar.py`。用例路径：`tla_ut/scalar/unary_math.py`。

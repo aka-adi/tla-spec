@@ -38,61 +38,82 @@ def example(src, dst):
 
 签名：`tla.load_gm_to_ub(src, dst, params=None)`
 
-返回：None。
+返回：None。更新已有的 UB 目标 Buffer，不返回新 Buffer；返回不代表 DMA 已完成。
 
 编译表示：hivm.hir.load。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | LoadOp 要求同 dtype。无 pad_mode 时形状相容。目标模板的 FP8 注册限 RegBase。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | LoadOp 要求同 dtype。无 pad_mode 时形状相容。目标模板的 FP8 注册限 RegBase。 | 必填 |
-| `params` | 控制搬运的配置 | tla.LoadGM2UBParams 或 None | None / tla.LoadGM2UBParams 实例 | None 创建默认配置。 | None |
-| `params.pad_mode` | 选择填充模式 | 编译期 tla.PadMode 或 None | None / PadNull / PadFirstElem / PadValue | None 或 PadNull 时 src/dst 形状相容且不传 pad_value。填充只改变末维，dst 末维不得小于 src。 | None |
-| `params.pad_value` | 填充时写入的标量 | int / float / 标量 tl.tensor / None | None 或标量 | PadValue 要求提供此值，其他模式不应提供。转换为 src 的元素类型。 | None |
-| `params.left_padding_num` | 左侧填充的元素数 | int / 标量整数 tl.tensor / None | None 或非负整数 | 单位为元素。调用者保证运行时值和目的容量。 | None |
-| `params.right_padding_num` | 右侧填充的元素数 | int / 标量整数 tl.tensor / None | None 或非负整数 | 单位为元素。调用者保证运行时值和目的容量。 | None |
-| `params.eviction_policy` | L2 驱逐策略提示 | 编译期 tla.EvictionPolicy 或 None | None / EvictNormal / EvictFirst / EvictLast | None 省略属性。 | None |
+| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 dst 相同 | 源视图须合法，与 dst 的 rank、逻辑 shape 相同；不做类型转换。 | 必填 |
+| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 src 相同 | 须预先分配；容量、别名和同步覆盖实际物理写入范围。 | 必填 |
+| `params` | L2 缓存配置 | tla.LoadGM2UBParams 或 None | None / tla.LoadGM2UBParams 实例 | 不可变配置；非空对象须为该配置类型。None 等价于默认配置。 | None |
+| `params.l2_cache_ctrl` | GM→UB 的 L2 缓存策略 | 编译期 tla.L2CachePolicy 或 None | None / NORMAL_FV / NORMAL_LV | 唯一配置字段。省略或 None 时由 TLA 显式选择 NORMAL_FV；不接受原始整数或字符串。 | None |
+
+`NORMAL_FV` 表示普通模式、优先淘汰，`NORMAL_LV` 表示普通模式、优先保留。通过 `LoadGM2UBParams` 配置，不作为 load 的独立关键字参数。公开字段名、枚举类型、已有成员名与含义保持稳定，后续能力通过新增枚举成员扩展；不保留旧字段 `eviction_policy`、旧公开枚举或 `EvictNormal` 兼容别名。
+
+约束：两个参数须为 Buffer 视图，不接受裸指针或 Buffer 元素访存位置。搬运范围由 shape/stride/offset 表达，shape 为编译期常量；不提供 Tensor mask、动态 size 或尾块 API。需要条件加载时使用显式控制流。
+
+约束：不提供 `pad_mode/pad_value/left_padding_num/right_padding_num` 配置。无效区域须独立初始化并建立同步；NPUIR 通用 LoadOp 的能力不等同于本接口的公开能力。
+
+本接口在外围 `tla.scope.vector()`、SIMD/SIMT VF 外调用。默认核内 DMA 依赖及结束等待由编译器生成，核间可见性须显式同步。
+
+硬件约束：无显式 padding 仍可能发生固有 32B 补齐。Normal 模式逐 burst 补齐，Compact 模式在连续块合并区域末尾补齐。UB backing 容量、相邻区域复用、别名和同步须覆盖完整物理写入范围，不能只按逻辑 shape 推断；非对齐 scalar 路由按自身实际写入范围处理。不能依赖固有补齐初始化任意无效区域或读取越界 GM 数据。
+
+float64 不通过 TA native IR 校验。其他 dtype、布局组合、缓存策略的路由限制及执行域检查缺口见[待决项](../tracking/dma.md#dma-002)。
 
 **调用示例**
 
-目的缓冲区与源视图均为 64 个 float32 元素。
+前提：`x`、`y` 均指向连续的 64 个 float32 元素，使用 `(2, 32)` 布局，完整行宽为 128B。
 
 ```python
 @tla.jit
-def example(x, dst_ub):
-    tla.load_gm_to_ub(tla.view(x, (64,)), dst_ub)
+def example(x, y):
+    with tla.scope.vector():
+        tile = tla.alloc((2, 32), tl.float32)
+        p: tl.constexpr = tla.LoadGM2UBParams(l2_cache_ctrl=tla.L2CachePolicy.NORMAL_LV)
+        tla.load_gm_to_ub(tla.view(x, (2, 32)), tile, p)
+        tla.store_ub_to_gm(tile, tla.view(y, (2, 32)))
 ```
 
-仓库测试：[tla_ut/scope/pointer_abi.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/pointer_abi.py#L16)。
+仓库测试：`tla_ut/dma/load_store.py`。
 
 <a name="api-tla-store-ub-to-gm"></a>
 
 ## tla.store_ub_to_gm
 
-签名：`tla.store_ub_to_gm(src, dst, params=None)`
+签名：`tla.store_ub_to_gm(src, dst)`
 
-返回：None。
+返回：None。更新已有的 GM 目标 Buffer，不返回旧值；返回不代表 DMA 已完成。
 
 编译表示：hivm.hir.store。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | StoreOp 要求同 dtype、形状相容。原子模式另有 dtype 限制。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | StoreOp 要求同 dtype、形状相容。原子模式另有 dtype 限制。 | 必填 |
-| `params` | 控制搬运的配置 | tla.StoreUB2GMParams 或 None | None / tla.StoreUB2GMParams 实例 | None 创建默认配置。 | None |
-| `params.atomic_kind` | 控制该次 store 的原子更新 | 编译期 tla.AtomicKind 或 None | None / NONE / ADD / MAX / MIN（常规 StoreOp 路径） | 其余枚举存在，但不能从枚举推出该目标上的原子写支持。 | None |
+| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 dst 相同 | 与 dst 的 rank、逻辑 shape 相同；源数据须已由相应生产者准备好。 | 必填 |
+| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 src 相同 | 目标视图须合法，不做类型转换。 | 必填 |
+
+本接口没有 `params`，不提供 `StoreUB2GMParams` 或逐次 store 的 `atomic_kind`。原子写回使用独立的 [tla.set_atomic](scalar.md#api-tla-set-atomic)，受控写回完成后用 NONE 显式复位；返回 None 或退出 scope 不代表完成和复位。
+
+约束：两个参数须为 Buffer 视图，搬运范围由 shape/stride/offset 表达，不提供 padding 或 Tensor mask。只写有效区域时，使用 shape 一致的 UB 源视图和 GM 目标视图；shape 为编译期常量，暂不提供动态 size 写回。
+
+本接口在外围 `tla.scope.vector()`、SIMD/SIMT VF 外调用。默认核内 DMA 依赖及结束等待由编译器生成，核间可见性须显式同步。dtype、布局组合及执行域检查缺口见[待决项](../tracking/dma.md#dma-003)。
+
+`tla.copy(ub, gm)` 分发到同一路由，仅接受 `params=None`，非空配置在分发时拒绝。
 
 **调用示例**
 
-源缓冲区与目的视图均为 64 个 float32 元素。
+前提：`x`、`y` 均指向连续的 64 个 float32 元素，使用 `(2, 32)` 布局。
 
 ```python
 @tla.jit
-def example(src_ub, y):
-    tla.store_ub_to_gm(src_ub, tla.view(y, (64,)))
+def example(x, y):
+    with tla.scope.vector():
+        tile = tla.alloc((2, 32), tl.float32)
+        tla.load_gm_to_ub(tla.view(x, (2, 32)), tile)
+        tla.store_ub_to_gm(tile, tla.view(y, (2, 32)))
 ```
 
-仓库测试：[tla_ut/scope/pointer_abi.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/pointer_abi.py#L17)。
+仓库测试：`tla_ut/dma/load_store.py`。
 
 <a name="api-tla-copy-l1-to-l0"></a>
 

@@ -8,13 +8,13 @@
 
 签名：`tla.sqrt(x)`
 
-返回：与所选标量或向量路径对应的结果。
+返回：输入值的平方根，类型为 float32 标量。
 
-编译表示：hivm.hir.vsqrt。
+编译表示：math.sqrt。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `x` | 输入值 | float / 标量 tl.tensor / tla.vector | 标量：float32<br>SIMD 向量：float16 / float32 | Python float 必须被 Triton 推断为 float32。输出保持数据类型，向量保持 lane 数。 | 必填 |
+| `x` | 输入值 | 浮点标量 | 数据类型：float32 | Python float 必须被 Triton 推断为 float32。输出保持数据类型。 | 必填 |
 
 **调用示例**
 
@@ -24,7 +24,7 @@ def example():
     value = tla.sqrt(4.0)
 ```
 
-仓库测试：[tla_ut/vector/vector_type.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/vector/vector_type.py#L124)。
+仓库测试：[tla_ut/vector/vector_type.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/vector/vector_type.py#L136)。
 
 <a name="api-tla-symbolic"></a>
 
@@ -44,8 +44,8 @@ def example():
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `a` | 第一个操作数 | int / 标量整数 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 不接受 bool。禁止混合 signed 和 unsigned tensor。除数非零，signed 最小值 ÷ −1 未定义。 | 必填 |
-| `b` | 第二个操作数 | int / 标量整数 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 不接受 bool。禁止混合 signed 和 unsigned tensor。除数非零，signed 最小值 ÷ −1 未定义。 | 必填 |
+| `a` | 第一个操作数 | 整数标量 | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 不接受 bool。禁止混合 signed 和 unsigned 整数标量。除数非零，signed 最小值 ÷ −1 未定义。 | 必填 |
+| `b` | 第二个操作数 | 整数标量 | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：int64 / uint64 | 不接受 bool。禁止混合 signed 和 unsigned 整数标量。除数非零，signed 最小值 ÷ −1 未定义。 | 必填 |
 
 **调用示例**
 
@@ -69,7 +69,7 @@ def example(x):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `cond` | 必须成立的条件 | 标量 int1 tl.tensor / bool | 数据类型：int1 | 条件为假时行为未定义。 | 必填 |
+| `cond` | 必须成立的条件 | bool 标量 | 数据类型：int1 | 条件为假时行为未定义。 | 必填 |
 
 **调用示例**
 
@@ -78,32 +78,6 @@ def example(x):
 def example(x):
     tl.assume(x >= 0)
 ```
-
-<a name="api-tla-where"></a>
-
-## tla.where
-
-签名：`tla.where(condition, x, y)`
-
-返回：与所选标量或向量路径对应的结果。
-
-编译表示：hivm.hir.vsel。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `condition` | 选择条件 | 编译期 bool / 标量 int1 tl.tensor / tla.vector（int1 谓词） | 标量：int1<br>SIMD：同 lanes 的 int1 谓词 | 运行时标量条件只选择标量分支。 | 必填 |
-| `x` | 输入值 | bool / int / float / 标量 tl.tensor / tla.vector | 标量：bool / 数值标量<br>SIMD：同 dtype、同 lanes 的一对向量 | 两分支均提前求值。 | 必填 |
-| `y` | 条件为假时选择的值 | bool / int / float / 标量 tl.tensor / tla.vector | 标量：bool / 数值标量<br>SIMD：同 dtype、同 lanes 的一对向量 | 两分支均提前求值。 | 必填 |
-
-**调用示例**
-
-```python
-@tla.jit
-def example(x):
-    value = tla.where(x > 0, x, 0)
-```
-
-仓库测试：[tla_ut/simd/add_cmp.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/add_cmp.py#L114)。
 
 ## 范围说明
 
