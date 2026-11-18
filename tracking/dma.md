@@ -39,9 +39,13 @@ GM↔UB 依据库上已有接口，以及 2026-11-18 的 `tla-programming-api.md
 
 结论：接口设计已确认。每次调用仅处理单 batch，不提供批量搬运配置；`k_part*` 和 `m` 不作为公开参数。
 
-实现待对齐：现有前端及独立操作 lowering 仍依赖旧分区字段，需改为从 buffer 视图构造模板参数，并采用单 batch 搬运路径。
+实现要求：前端根据目的视图推导 K 和 M/N，根据源视图及 is_transpose 检查搬运范围。源视图负责选择分块起点，stride 和 offset 保留在 memref 描述符中。底层操作需要的分区字段由前端内部构造，不重新暴露给调用方，也不引入批量参数。
 
-依据：AscendNPU-IR `c521aba2` 的 RegBase 模板 `copy_l1_to_l0a_a5.hpp`、`copy_l1_to_l0b_a5.hpp`。后续需核对 L0A/L0B 与转置的组合行为；旧分区接口的结果不能替代新签名的覆盖。
+实现按此规格对齐并进入待转测范围；当前实现缺口不作为删除规格或免测的依据。L0 DMA 输出由显式 MMAD L0 消费，相关入口基于 [Triton Ascend PR #2982](https://github.com/triton-lang/triton-ascend/pull/2982)。后端接口依据 AscendNPU-IR c521aba2 的 RegBase 单 batch 搬运模板；底层保留分区字段不影响公开接口只提供 is_transpose。
+
+补充结论：源、目的的 stride 均以元素计，内层固定 `(256,16,1)`，仅最外层允许按 fractal 对齐的额外间距。该要求已写入规格，合法的外层 pitch、offset 和子视图仍属于待转测范围。已知静态 offset 的对齐诊断应穿透 `subview` 和 `reshape`；动态 offset 仍须满足同一约束。
+
+补充依据：TA main `f1997518` 合入 PR #3267（`c8a02948`）与 PR #2982（`99373b0d`），并按规格对齐 L1→L0 前端；实际使用 AscendNPU-IR `c521aba2`。检查覆盖 FP16/BF16、L0A/L0B、转置、外层间距、静态/动态 offset 及容量边界，不代表任意视图穷举。
 
 <a name="dma-005"></a>
 

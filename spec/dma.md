@@ -134,6 +134,8 @@ def example(x, y):
 
 约束：每次调用仅处理单 batch，不提供批量搬运配置。源、目的使用相容的 4D 物理布局，FP16/BF16 的内层为 (16,16)；地址范围不得越界，且不得超过 L0A/L0B 各 64KiB 的容量。调用方负责 MTE2→MTE1→M 的依赖及缓冲区复用生命周期。
 
+约束：stride 以元素为单位。源、目的均须满足 `strides[1:] = (256, 16, 1)`；`stride[0]` 为 256 的倍数，且不小于 `shape[1] × 256`。仅最外层允许额外间距，内层 fractal 必须连续；转置模式不放宽这些物理布局要求。
+
 约束：暂不支持其他数据类型、布局及自动补齐尾块。
 
 仓库 IR 构造用例：[tla_ut/dma/copy.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/copy.py#L42)。

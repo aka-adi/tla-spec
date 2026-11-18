@@ -44,3 +44,18 @@
 - PR #3224 允许 `sizes` 和 `strides` 为运行时整数标量 tensor，任一维度动态时整视图的边界检查推迟到运行时；当前规格只允许编译期正整数。
 
 结论：待决。需确认本轮规格保留静态限制，还是与实现一致地允许运行时 sizes/strides。空间范围见 [MEMORY-003](#memory-003)。
+
+<a name="memory-005"></a>
+
+## MEMORY-005 · tla.fill 输入与视图范围
+
+[查看规格](../spec/memory.md#api-tla-fill)
+
+结论：本轮接口范围已确定，按规格进入待转测。目的为直接分配或等价 reshape 的连续零偏移 UB；Python 整数限 int32 范围，Python float 仅用于 FP32 目的；按上游已确认的接口范围，不接受 tensor（含标量 tl.tensor）。以下事项属于规格外行为或实现检查缺口，不表示本轮接口设计仍待决策。
+
+- BF16 Python float 和运行时标量 tensor 不在当前范围内。此前类型转换链路曾出现缺少 `vcast_*_1d_with_mode` 符号的问题，后续扩展须重新核对转换及目标链接能力。
+- 目的 subview 不在当前范围内。`subview` 的公开 buffer offset 仍可能为未知值；用于 DMA 诊断的静态 offset metadata 不代表 fill 已支持这些视图。
+- Python bool 已被拒绝；tensor 输入及部分常量范围的前端检查仍需按 spec 补齐。规格中的禁止条件不等同于当前前端已统一拒绝全部非法调用。
+- 浮点常量按数值语义填充，不承诺负零符号或 NaN 载荷的位级保持；这些边界已写入规格。
+
+依据：TA main `f1997518` 合入 PR #3267（`c8a02948`）与 PR #2982（`99373b0d`），实际使用 AscendNPU-IR `c521aba2`。检查覆盖 FP32/BF16/int32、常量、连续分配与 reshape、尾部和数值边界；本次相关正例通过。此前同 dtype 运行时标量的检查仅作为实现证据，上游已将 tensor 输入排除在本轮规格外，不计入当前待转测范围。该范围进入待转测，不代表任意输入已经穷举。

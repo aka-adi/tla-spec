@@ -133,7 +133,17 @@ def example(x_ub, y):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `dst` | 待填充的缓冲区 | tla.buffer | UB；float32 / bfloat16 / int32；1D / 2D | 连续 row-major，offset=0，元素数为正且不超过 UB 容量；允许非对齐尾部。 | 必填 |
-| `value` | 广播标量 | int / float | 可转换为目标元素类型的标量 | 不接受 bool 或 tensor（含标量 tl.tensor）；int32 目标不接受浮点值，常量整数须位于 int32 范围。 | 必填 |
+| `dst` | 待填充的缓冲区 | tla.buffer | UB；float32 / bfloat16 / int32；1D / 2D | 连续 row-major、offset=0 的直接分配或等价 reshape；元素数为正且不超过 UB 容量；允许非对齐尾部。 | 必填 |
+| `value` | 广播标量 | Python int / Python float | 仅限下表组合 | 不接受 Python bool 或 tensor（含标量 tl.tensor）。 | 必填 |
 
-不支持非零或动态偏移、带行间距的非连续视图及其他地址空间。标量按目标类型转换；调用方须确保生产、消费及复用缓冲区的依赖有正确同步。
+| 目的元素类型 | Python 常量 |
+| --- | --- |
+| float32 | int32 范围内的整数；float |
+| bfloat16 | int32 范围内的整数；暂不支持 Python float |
+| int32 | int32 范围内的整数；不接受 float |
+
+整数常量范围为 `[-2**31, 2**31-1]`，填充浮点目的时按目的类型舍入。当前仅提供 Python 常量输入，不提供运行时标量 tensor 输入或其隐式类型转换。
+
+目的仅提供直接 `tla.alloc` 或保持连续、零偏移的 `tla.reshape` 结果。暂不支持任何目的 `subview`（包括静态全零 offset）、非零或动态偏移、带行间距的非连续视图及其他地址空间。
+
+浮点常量按数值语义填充，不承诺负零符号或 NaN 载荷的位级保持。调用方须确保生产、消费及复用缓冲区的依赖有正确同步。

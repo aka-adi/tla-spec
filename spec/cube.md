@@ -17,7 +17,9 @@
 | `src` | 源 | tla.buffer | UB；float16 / bfloat16 | 保持准备好的物理布局，不自动 ND2NZ。 | 必填 |
 | `dst` | 目的 | tla.buffer | L1；与 src 相同 | 形状与布局须匹配。 | 必填 |
 
-支持 4D NZ 物理拷贝及 2D 物理视图子块拷贝；末维连续，源和目的形状相容，偏移及行间距不得导致越界。该接口不执行 ND2NZ，调用方须先准备目标物理布局。AIV 写入后供 AIC 消费必须建立跨核同步。
+支持 4D NZ 物理拷贝及 2D 物理视图子块拷贝；末维连续，源和目的形状相容。源、目的有效起始地址（含 offset）、相邻搬运行的字节间距及每行搬运字节数均须为 32B 的整数倍；FP16/BF16 对应 16 个元素。NZ 子块还须保持完整的物理分块。偏移、行间距及实际搬运范围不得导致越界；不提供非对齐搬运回退。
+
+该接口不执行 ND2NZ，调用方须先准备目标物理布局。多个 AIV 子块写共享 L1 时必须使用互不重叠的目的范围，或只由一个子块写入；AIV 写入后供 AIC 消费必须建立跨核同步。完成同步不消除多个写者之间的重叠写竞争。
 
 约束：暂不支持手动设置 `pad_mode` 和 `pad_value`。
 
@@ -43,7 +45,9 @@ def example(src, dst):
 | `src` | 源 | tla.buffer | L1；float16 / bfloat16 | 4D NZ 物理布局。 | 必填 |
 | `dst` | 目的 | tla.buffer | UB；与 src 相同 | 2D ND；逻辑元素数一致。 | 必填 |
 
-允许末维连续的行间距和偏移子视图。当前路径写入 sub-block 0 的 UB，由 AIC 发出 MTE1→AIV 的跨核同步后，由对应子块读取。不提供其他 dtype、5D 批量或非连续末维。
+允许末维连续且满足对齐的行间距和偏移子视图。目的 UB 的有效起始地址（含 offset）及行间距须为 32B 的整数倍；FP16/BF16 对应 16 个元素。L1 源子块须保持完整 NZ 分块，源和目的范围均不得越界。不提供非对齐搬运回退。
+
+当前路径写入 sub-block 0 的 UB，由 AIC 发出 MTE1→AIV 的跨核同步后，由对应子块读取。不提供其他 dtype、5D 批量或非连续末维。
 
 ```python
 @tla.jit
@@ -89,8 +93,8 @@ def example(src, dst):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 累加结果 | tla.buffer | L0C；float32 | 4D NZ；不得读取未初始化累加器。 | 必填 |
-| `dst` | 目的 | tla.buffer | UB；float32 / float16 / bfloat16 | 形状、布局与类型须符合本接口的组合限制。 | 必填 |
+| `src` | 累加结果 | tla.buffer | L0C；float32 | 4D NZ；NZ2NZ 还须满足下方来源连续性约束；不得读取未初始化累加器。 | 必填 |
+| `dst` | 目的 | tla.buffer | UB；float32 / float16 / bfloat16 | 仅限连续物理布局、offset=0 的直接分配或等价 reshape；还须符合本接口的组合限制。 | 必填 |
 | `params` | 搬运配置 | tla.FixpipeL0C2UBParams / None | 本接口列出的配置组合 | None 使用下列字段的默认值。 | None |
 | `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND / NZ2NZ / NZ2DN | 与 dst 的 rank、shape 配套。 | NZ2NZ |
 | `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT / F322F16 / F322BF16 | 分别对应 FP32 / FP16 / BF16；还须满足下方组合限制。 | NO_QUANT |
@@ -111,6 +115,10 @@ def example(src, dst):
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | COLUMN_SPLIT | 必须显式 None | 2D (M,N/2) |
 
 逻辑 M、N 为 16 的正整数倍，源和目的均不得超过各自存储空间容量。ROW_SPLIT 要求 M 可均分；COLUMN_SPLIT 要求 N 为 32 的倍数。双目标不支持 NZ2NZ/NZ2DN，也不能同时指定单目标子块。
+
+当 `dma_mode=NZ2NZ` 时，来源必须为连续的 4D NZ 物理布局，内层为 `(16,16)`，以元素为单位的 stride 必须为 `(shape[1] × 256, 256, 16, 1)`。暂不支持保留父 buffer 额外间距的来源子视图；不能仅修改 shape 或 stride 描述来替代实际数据重排。此项来源连续性限制仅适用于 NZ2NZ。
+
+目的 UB 仅提供上述形状对应的连续物理布局，使用直接 `tla.alloc` 或保持连续、零偏移的 `tla.reshape` 结果。暂不支持目的 `subview`、非零或动态 offset、带额外行间距的目的视图；满足 32B 对齐也不自动获得这些视图的支持。
 
 AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。单目标仅由指定子块消费；双目标分别消费对应行分块或列分块。
 
@@ -156,6 +164,8 @@ AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。�
 内部保留 `quant_scale=None`、`unit_flag_ctrl=None`、`unit_flag_group_id=None` 的默认行为；None 表示属性缺省，不等同于 DISABLED。这些字段不作为本轮可配置参数。
 
 另外固定 `channel_split=False`、`c0_pad_en=True`，不提供配置变体。
+
+约束：`NZ2NZ + NO_QUANT→FP32` 在上述固定配置下输出 C0=16 的 NZ 物理布局，对逻辑 `(M,N)` 使用 `(N/16, M/16, 16, 16)` 描述。该输出不能直接作为要求 C0=8 布局的 FP32 Cube 输入；须先完成实际布局转换。`reshape` 或修改视图元数据不会重排数据，也不能解除此限制。
 
 约束：暂不支持 `QF322F32_PRE`、手动设置 `quant_scale`、`LEAKY_RELU/P_RELU`、整数/FP8、5D 批量及手动 UnitFlag。
 
