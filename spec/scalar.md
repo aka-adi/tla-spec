@@ -197,7 +197,7 @@ def example(size: tl.constexpr):
 
 签名：`tla.exp(x)`
 
-返回：e 的 x 次方，为 FP32 标量 tl.tensor。
+返回：e 的 x 次方，为 FP32 标量。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -241,7 +241,7 @@ def example():
 
 签名：`tla.log1p(x)`
 
-返回：ln(1+x)，为 FP32 标量 tl.tensor。
+返回：ln(1+x)，为 FP32 标量。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -333,7 +333,7 @@ def example(x, y):
 
 签名：`tla.sigmoid(x)`
 
-返回：1/(1+exp(−x))，为 FP32 标量 tl.tensor。
+返回：1/(1+exp(−x))，为 FP32 标量。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -353,17 +353,17 @@ def example(x):
 
 ## 标量数学函数转测范围
 
-本轮只覆盖 Ascend 950PR 上的 TLA 标量 FP32 功能。以运行时 FP32 标量输入为主，验证单个 `@tla.jit` kernel 的编译和结果。用例的 SIMD 写回只用于读取标量结果。
+本轮覆盖 Ascend 950PR 上的 TLA 标量 FP32 功能。运行时输入和返回值都是 FP32 标量，Triton 前端用秩为 0 的 `tl.tensor` 表示。编译期 Python 浮点数按 FP32 验证 IR。实机用例通过单个 `@tla.jit` kernel 验证运行时标量，SIMD 写回只用于读取计算结果。
 
 | 接口 | 正向用例 |
 | --- | --- |
 | `tla.exp` | 常规正负值、零、FP32 上溢和下溢边界、正负无穷、NaN |
-| `tla.log1p` | 接近零的正负值、正零和负零的符号、−1 附近、−1、低于 −1、较大正值、正负无穷、NaN |
+| `tla.log1p` | 接近零的正负值、正零和负零的符号、范围缩减切换点、−1 附近、−1、低于 −1、较大正值、正负无穷、NaN |
 | `tla.sigmoid` | 常规正负值、大幅值正负输入、零、正负无穷、NaN |
 
-- 验收覆盖适配器 IR、设备编译和数值结果。负向抽测 bool、int、非 FP32 标量 tensor 和块 tensor，预期前端报 TypeError。数值对照 PyTorch FP32，同位置 NaN 视为匹配。验收容差为 `rtol=1e-5`、`atol=2**-126`，`log1p(±0)` 另核对零的符号。
+- 验收覆盖适配器 IR、结果秩与类型、设备编译和数值结果。负向抽测 bool、int、非 FP32 标量 tensor 和块 tensor，预期前端报 TypeError。数值对照 PyTorch FP32，同位置 NaN 视为匹配。验收容差为 `rtol=1e-5`、`atol=2**-126`。绝对容差允许目标对次正规结果冲零。`log1p(±0)` 另核对零的符号。
 - 本轮范围外包括其他 dtype、块张量和 SIMD 向量的正向用例，以及 SIMT 和其他芯片。原生单指令映射、性能指标和 ULP 误差上限留待单独评审。
 
-参考实现位于 triton-ascend 开发分支。已有验证用 Ascend 950PR、`2aa6cc727` wheel 和该分支改动通过了 12 个标量用例。转测进度见首页。
+参考实现见 [triton-ascend PR #3268](https://github.com/triton-lang/triton-ascend/pull/3268)。用 Ascend 950PR、`2aa6cc727` wheel 和该 PR 改动验证了三项接口，15 项检查全部通过。转测进度见首页。
 
-仓库测试：[tla_ut/scalar/unary_math.py](https://github.com/patchliu/triton-ascend/blob/fd41d953c856dd6c1ff63388cdab5235de070df1/third_party/ascend/unittest/tla_ut/scalar/unary_math.py#L53)。
+实现路径：`tla/scalar.py`。用例路径：`tla_ut/scalar/unary_math.py`。
