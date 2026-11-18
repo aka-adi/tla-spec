@@ -170,9 +170,9 @@
 
 [查看规格](../spec/simd.md#api-tla-simd-vaddcs)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+- 实现已存在：`vaddcs(src0, src1, carry, mask=None)`，返回 `(sum, carry_out)`；64 lane int32/uint32，`carry` 必填。
 
-结论：待决。
+结论：待决。规格已按实现补齐，请确认签名后关闭。
 
 <a name="simd-071"></a>
 
@@ -180,9 +180,10 @@
 
 [查看规格](../spec/simd.md#api-tla-simd-vsubcs)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+- 实现已存在：`vsubcs(src0, src1, borrow, mask=None)`，返回 `(diff, borrow_out)`；约束同 `vaddcs`。
+- 注意极性：本接口的 `borrow` 与 AVE 侧 no-borrow 的 `carry_in` 相反，前端已取反。
 
-结论：待决。
+结论：待决。规格已按实现补齐，请确认签名与极性描述后关闭。
 
 <a name="simd-074"></a>
 
@@ -190,9 +191,10 @@
 
 [查看规格](../spec/simd.md#api-tla-simd-vcpadd)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+- 实现已存在：`vcpadd(src, mask=None, mode=...)`，返回 `tla.vector`（原提案的 `-> tla,tensor` 是笔误）。
+- 语义为相邻 lane 配对求和：结果 lane `j < N/2` 为 `src[2j] + src[2j+1]`，其余 lane 为 0；只支持 f16/f32 满寄存器。
 
-结论：待决。
+结论：待决。规格已按实现补齐，请确认后关闭。
 
 <a name="simd-076"></a>
 
@@ -200,9 +202,10 @@
 
 [查看规格](../spec/simd.md#api-tla-simd-vusqz)
 
-- 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
+- 原描述"拟将谓词展开为索引向量"与实现不符：实现返回排他前缀计数（结果 lane `i` 为索引小于 `i` 的活跃 lane 数）。
+- 实现签名 `vusqz(mask, dtype='u32')`，`dtype` 决定结果位宽与 lane 数。
 
-结论：待决。
+结论：待决。规格已按实现更正，请确认后关闭。
 
 <a name="simd-078"></a>
 
