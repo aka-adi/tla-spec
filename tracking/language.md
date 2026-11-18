@@ -25,3 +25,13 @@
 原评审问题：是否纳入本轮规格并补齐实现。
 
 结论：已关闭。确认不需要此接口，退出规格范围。
+
+<a name="language-003"></a>
+
+## LANGUAGE-003 · tla.where
+
+[查看规格](../spec/language.md#api-tla-where)
+
+原评审问题：与 [tla.select](../spec/scalar.md#api-tla-select) 的选择语义重叠，是否单独提供。
+
+结论：已关闭。确认不需要此接口，选择语义由 tla.select 承担，保留原规格入口供追溯。
