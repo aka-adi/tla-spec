@@ -52,23 +52,3 @@ def example():
     tla.annotate_multi_buffer(tile, 2)
 ```
 
-## 范围说明
-
-以下条目在当前整理表中没有可定位的 TLA 接口名。
-
-| 原序号 | 范围结论 | 涉及场景 |
-| --- | --- | --- |
-| 179 | 不涉及 | T.PerCoreTask（开发者模式） |
-| 180 | 不涉及 | T.Persistent（开发者模式） |
-| 181 | 不涉及 | T.Pipelined（开发者模式） |
-| 182 | 不涉及 | T.Stage（开发者模式） |
-| 183 | 不涉及 | T.Task（开发者模式） |
-| 185 | 暂不支持 | T.annotate_manual_multi_buffer |
-| 186 | 暂不支持 | T.annotate_unlimit_memory |
-| 187 | 暂不支持 | T.assume_conflict |
-| 188 | 暂不支持 | T.assume_no_conflict |
-| 189 | 暂不支持 | T.AscendBaseTileScheduler |
-| 190 | 暂不支持 | T.AscendTileScheduler |
-| 191 | 暂不支持 | T.AscendBatchedTileScheduler |
-| 192 | 暂不支持 | T.AscendMGroupedTileScheduler |
-| 193 | 暂不支持 | T.AscendKGroupedTileScheduler |
