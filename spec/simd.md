@@ -358,7 +358,7 @@ def example(a_ub, b_ub):
 | --- | --- | --- | --- | --- | --- |
 | `acc` | 累加器 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 标量 tensor 与源 dtype 一致。整数常量使用源 dtype 的数值范围。前端也接收单 lane 向量，但 AVE scalar 操作数要求标量。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | tensor 须为秩 0 且与源 dtype 一致；整数常量在源 dtype 范围内。单 lane vector 不满足 AVE 标量类型要求，不能作为有效输入；当前前端尚未提前拒绝。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 保留第一个向量操作数的 inactive lane，ZEROING 将其置零。 | MODE.ZEROING |
 
@@ -381,33 +381,159 @@ def example(a_ub, b_ub):
 
 ## tla.simd.vcadd
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vcadd(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-原始提案：`def vcadd( src: tla.vector, mask: tla.vector = None, mode: tl.constexpr = tla.simd.MODE.ZEROING, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：与 src 同 dtype、同 lane 数的向量；只有 lane 0 是求和结果。
+
+编译表示：ave.hir.reduction。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 待求和的数据 | tla.vector | 本节验证范围：int32 / float32，64 lanes | 前端未逐类型限制；其他类型组合不据此视为已验证。 | 必填 |
+| `mask` | 选择参与计算的元素 | tla.vector（int1）或 None | lane 数：64 | None 表示全部启用。 | None |
+| `mode` | 结果模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING | MERGING 报错。 | MODE.ZEROING |
+
+对 mask 为真的所有源元素求和，结果放在第 0 个 lane。其余 lane 未定义为有效结果，不能依赖其为零。返回类型不扩宽；浮点结果遵循目标归约顺序，不保证与逐元素顺序累加逐位一致。
+
+专用用例覆盖 int32、float32 的全真、全假、前缀及混合 mask；尚未完成的类型矩阵见 [SIMD-014](../tracking/simd.md#simd-014)。
+
+**调用示例**
+
+x_ub 为连续 64 个 float32 元素；只使用 result 的第 0 个 lane。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        src = tla.simd.vlds(x_ub[0])
+        result = tla.simd.vcadd(src)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L2645)。AVE 结果契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L767)。
+
+仓库测试：[memory_completion.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L48)。
 
 <a name="api-tla-simd-vcgadd"></a>
 
 ## tla.simd.vcgadd
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vcgadd(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-原始提案：`def vcgadd( src: tla.vector, mask: tla.vector = None, mode: tl.constexpr = tla.simd.MODE.ZEROING, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：满寄存器向量，前 8 个 lane 为各组结果，其余 lane 为零。
+
+编译表示：ave.hir.group_reduction。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 待分组归约的数据 | tla.vector | int16 / uint16 / float16：128 lanes；int32 / uint32 / float32：64 lanes | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
+| `mask` | 选择参与计算的元素 | tla.vector（int1）或 None | lane 数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
+| `mode` | 结果的掩码处理方式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | 两种模式结果相同；没有旧目标值可保留，结果尾部始终为零。 | MODE.ZEROING |
+
+仅支持 Ascend950。把源寄存器分成 8 个连续的 32 字节组，每组独立求和：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
+
+int16 / uint16 输入扩宽为 int32 / uint32，返回 64 lanes；int32 / uint32 加法按 32 位回绕。float16 / float32 保持输入类型，按硬件顺序求和；空组结果为零。
+
+Ascend960 的分组语义不同，当前 lowering 拒绝该目标。
+
+**调用示例**
+
+Ascend950；x_ub 为连续 64 个 float32 元素，result[0:8] 分别对应原数据的八组。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        src = tla.simd.vlds(x_ub[0])
+        result = tla.simd.vcgadd(src)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3087)。AVE 分组及类型契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514)。
+
+仓库测试：[group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33)。
 
 <a name="api-tla-simd-vcgmax"></a>
 
 ## tla.simd.vcgmax
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vcgmax(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-原始提案：`def vcgmax( src: tla.vector, mask: tla.vector = None, mode: tl.constexpr = tla.simd.MODE.ZEROING, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：满寄存器向量，前 8 个 lane 为各组结果，其余 lane 为零。
+
+编译表示：ave.hir.group_reduction。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 待分组归约的数据 | tla.vector | int16 / uint16 / float16：128 lanes；int32 / uint32 / float32：64 lanes | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
+| `mask` | 选择参与计算的元素 | tla.vector（int1）或 None | lane 数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
+| `mode` | 结果的掩码处理方式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | 两种模式结果相同；没有旧目标值可保留，结果尾部始终为零。 | MODE.ZEROING |
+
+仅支持 Ascend950。把源寄存器分成 8 个连续的 32 字节组，每组独立取最大值：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
+
+结果保持输入 dtype 和 lane 数；整数比较按 dtype 的符号解释。空组使用硬件对应归约的初始值；浮点 NaN、正负零和无穷值遵循目标指令规则，不承诺与 Python 顺序比较一致。
+
+Ascend960 的分组语义不同，当前 lowering 拒绝该目标。
+
+**调用示例**
+
+Ascend950；x_ub 为连续 64 个 float32 元素，result[0:8] 分别对应原数据的八组。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        src = tla.simd.vlds(x_ub[0])
+        result = tla.simd.vcgmax(src)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3101)。AVE 分组及类型契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514)。
+
+仓库测试：[group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33)。
 
 <a name="api-tla-simd-vcgmin"></a>
 
 ## tla.simd.vcgmin
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vcgmin(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-原始提案：`def vcgmin( src: tla.vector, mask: tla.vector = None, mode: tl.constexpr = tla.simd.MODE.ZEROING, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：满寄存器向量，前 8 个 lane 为各组结果，其余 lane 为零。
+
+编译表示：ave.hir.group_reduction。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 待分组归约的数据 | tla.vector | int16 / uint16 / float16：128 lanes；int32 / uint32 / float32：64 lanes | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
+| `mask` | 选择参与计算的元素 | tla.vector（int1）或 None | lane 数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
+| `mode` | 结果的掩码处理方式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | 两种模式结果相同；没有旧目标值可保留，结果尾部始终为零。 | MODE.ZEROING |
+
+仅支持 Ascend950。把源寄存器分成 8 个连续的 32 字节组，每组独立取最小值：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
+
+结果保持输入 dtype 和 lane 数；整数比较按 dtype 的符号解释。空组使用硬件对应归约的初始值；浮点 NaN、正负零和无穷值遵循目标指令规则，不承诺与 Python 顺序比较一致。
+
+Ascend960 的分组语义不同，当前 lowering 拒绝该目标。
+
+**调用示例**
+
+Ascend950；x_ub 为连续 64 个 float32 元素，result[0:8] 分别对应原数据的八组。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        src = tla.simd.vlds(x_ub[0])
+        result = tla.simd.vcgmin(src)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3112)。AVE 分组及类型契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514)。
+
+仓库测试：[group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33)。
 
 <a name="api-tla-simd-vci"></a>
 
@@ -872,9 +998,38 @@ def example(x_ub, indices_ub):
 
 ## tla.simd.vld2
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vld2(src, dist='DINTLV_B16', off=None)`
 
-原始提案：`def vld2( src: tla.buffer, dist: tl.constexpr = tla.simd.LOAD_DIST.DINTLV_B16, off=None, # 附加偏移操作数（标量/表达式） ) -> tuple[tla.vector, tla.vector]: # (even, odd)`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：两个与源缓冲区同 dtype 的满寄存器向量 (even, odd)。
+
+编译表示：两次 ave.hir.vload + ave.hir.vdintlv。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 连续读取的起始地址 | tla.buffer / buffer_access | UB、一维连续；int16 / uint16 / float16 / bfloat16 / int32 / uint32 / float32 | buf 等价于 buf[0]；起始地址后必须能完整读取两个寄存器。 | 必填 |
+| `dist` | 加载后去交错的元素宽度 | 编译期 str | DINTLV_B16 / DINTLV_B32 | 必须与 src 元素位宽一致；32 位数据需显式传 DINTLV_B32。 | 'DINTLV_B16' |
+| `off` | 在 src 基础上再增加的偏移 | 整数常量 / 整数标量 / None | 单位为元素 | 最终范围由 src 下标与 off 共同决定；动态偏移也必须满足边界。 | None（不增加偏移） |
+
+设每个寄存器有 N 个元素，从最终起点连续读 2N 个元素：even[i] 取第 2i 个，odd[i] 取第 2i+1 个。16 位数据 N=128，32 位数据 N=64。无 mask，也不更新地址。
+
+专用用例包含 int16、float16、int32、float32；uint16、uint32、bfloat16 属于入口接受的组合，尚不能据此声明相同的真机覆盖。
+
+**调用示例**
+
+x_ub 为连续 128 个 float32 元素，满足完整读取范围。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        even, odd = tla.simd.vld2(x_ub[0], dist='DINTLV_B32')
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L936)。
+
+仓库测试：[memory_completion.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L51)。
 
 <a name="api-tla-simd-vln"></a>
 
@@ -1144,9 +1299,11 @@ def example(a_ub, b_ub, c_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同型，返回同型低半部和高半部。uint32 的最高位场景应验证高半部符号解释。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同型，返回同型低半部和高半部。uint32 的最高位场景应验证高半部符号解释。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同型，返回同型低半部和高半部。前端接受 uint32，但当前高半部有已知错误，见下方限制。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同型，返回同型低半部和高半部。前端接受 uint32，但当前高半部有已知错误，见下方限制。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
+
+当前限制：问题单报告 950PR 上 `uint32(0xFFFFFFFF) × uint32(2)` 的高半部得到 `0xFFFFFFFF`，正确值应为 `0x00000001`；低半部均为 `0xFFFFFFFE`。当前 builder 未传入无符号 cast。`uint32` 暂不纳入设备正向验收，待修复并回归；`int32` 用例可独立保留。证据与后续验证见 [SIMD-042](../tracking/simd.md#simd-042)。
 
 **调用示例**
 
@@ -1176,7 +1333,7 @@ def example(a_ub, b_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 标量 tensor 与源 dtype 一致。整数常量使用源 dtype 的数值范围。前端也接收单 lane 向量，但 AVE scalar 操作数要求标量。 B64 大整数常量经由 double 构造，需保持精确值时传入同 dtype 的标量 tensor。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | tensor 须为秩 0 且与源 dtype 一致；整数常量在源 dtype 范围内。单 lane vector 不满足 AVE 标量类型要求，不能作为有效输入；当前前端尚未提前拒绝。 B64 整数常量经 double 构造，2**53+1 会先变为 2**53；精确值须通过同 dtype 的秩 0 tensor 传入。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 保留第一个向量操作数的 inactive lane，ZEROING 将其置零。 | MODE.ZEROING |
 
@@ -1770,33 +1927,151 @@ def example():
 
 ## tla.simd.ppack
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.ppack(src, part=tla.simd.PART.LOWER)`
 
-原始提案：`def ppack( src: tla.vector, part=tla.simd.PART.EVEN, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：int1 谓词向量；64→128 或 128→256 lanes。
+
+编译表示：ave.hir.preg.pack。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 源逻辑谓词 | tla.vector（int1） | 64 / 128 lanes | lane 表示逻辑布尔元素；物理寄存器 padding 不参与接口语义。 | 必填 |
+| `part` | 选择连续的下半区或上半区 | 编译期 tla.simd.PART 常量或 str | PART.LOWER / PART.HIGHER，即 'lower' / 'higher' | 不接受 EVEN / ODD。 | PART.LOWER |
+
+设源有 N 个元素，输出有 2N 个。LOWER 将 src 放在前 N 个位置，HIGHER 放在后 N 个位置，另一半全部为 false。例如 128 个 true 做 LOWER pack 后得到前 128 个 true、后 128 个 false。
+
+此接口改变逻辑谓词长度；与只调整物理布局的 preg.cast 不同。无需额外 mask、mode 或 width 参数。
+
+**调用示例**
+
+src 为 64 lanes，result 为 128 lanes。
+
+```python
+@tla.jit
+def example():
+    with tla.scope.simd():
+        src = tla.simd.pset(32)
+        result = tla.simd.ppack(src, part=tla.simd.PART.LOWER)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3001)。AVE 逻辑长度及半区契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L438)。
+
+仓库测试：[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L33)、[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L138)。
 
 <a name="api-tla-simd-punpack"></a>
 
 ## tla.simd.punpack
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.punpack(src, part=tla.simd.PART.LOWER)`
 
-原始提案：`def punpack( src: tla.vector, part=tla.simd.PART.EVEN, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：int1 谓词向量；128→64 或 256→128 lanes。
+
+编译表示：ave.hir.preg.unpack。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 源逻辑谓词 | tla.vector（int1） | 128 / 256 lanes | lane 表示逻辑布尔元素；物理寄存器 padding 不参与接口语义。 | 必填 |
+| `part` | 选择连续的下半区或上半区 | 编译期 tla.simd.PART 常量或 str | PART.LOWER / PART.HIGHER，即 'lower' / 'higher' | 不接受 EVEN / ODD。 | PART.LOWER |
+
+从 N 个源元素中取连续 N/2 个：LOWER 取 src[0:N/2]，HIGHER 取 src[N/2:N]；保留选中元素的布尔值和顺序。
+
+此接口改变逻辑谓词长度；与只调整物理布局的 preg.cast 不同。无需额外 mask、mode 或 width 参数。
+
+**调用示例**
+
+src 为 128 lanes，result 为 64 lanes。
+
+```python
+@tla.jit
+def example():
+    with tla.scope.simd():
+        src = tla.simd.pset(16)
+        result = tla.simd.punpack(src, part=tla.simd.PART.LOWER)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3011)。AVE 逻辑长度及半区契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L448)。
+
+仓库测试：[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L33)、[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L176)。
 
 <a name="api-tla-simd-pintlv"></a>
 
 ## tla.simd.pintlv
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.pintlv(src0, src1)`
 
-原始提案：`def pintlv( src0: tla.vector, src1: tla.vector, width=32, )-> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：两个 int1 谓词向量组成的 tuple，二者均与输入同 lane 数。
+
+编译表示：ave.hir.preg.interleave。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src0` | 第一个源谓词 | tla.vector（int1） | 64 / 128 / 256 lanes | 两个源谓词的 lane 数必须相同。 | 必填 |
+| `src1` | 第二个源谓词 | tla.vector（int1） | 64 / 128 / 256 lanes | 两个源谓词的 lane 数必须相同。 | 必填 |
+
+按 src0[0]、src1[0]、src0[1]、src1[1]……交错成 2N 个逻辑布尔值；前 N 个放入第一个结果，后 N 个放入第二个结果。
+
+同一谓词密度下，pdintlv(*pintlv(a, b)) 恢复 a、b。宽度由输入 lane 数确定，不接收 width、mask 或 mode 参数；两个输出都可独立使用。
+
+**调用示例**
+
+a、b 都是 64 lanes 的逻辑谓词。
+
+```python
+@tla.jit
+def example():
+    with tla.scope.simd():
+        a = tla.simd.pge(32, 64)
+        b = tla.simd.pge(16, 64)
+        first, second = tla.simd.pintlv(a, b)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3030)。AVE 双结果契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L472)。
+
+仓库测试：[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L33)、[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L176)。
 
 <a name="api-tla-simd-pdintlv"></a>
 
 ## tla.simd.pdintlv
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.pdintlv(src0, src1)`
 
-原始提案：`def pdintlv( src0: tla.vector, src1: tla.vector, width=32, )-> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：两个 int1 谓词向量组成的 tuple，二者均与输入同 lane 数。
+
+编译表示：ave.hir.preg.deinterleave。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src0` | 第一个源谓词 | tla.vector（int1） | 64 / 128 / 256 lanes | 两个源谓词的 lane 数必须相同。 | 必填 |
+| `src1` | 第二个源谓词 | tla.vector（int1） | 64 / 128 / 256 lanes | 两个源谓词的 lane 数必须相同。 | 必填 |
+
+先把 src0、src1 按顺序拼成 2N 个逻辑布尔值；第一个结果取偶数位置，第二个取奇数位置。
+
+同一谓词密度下，pdintlv(*pintlv(a, b)) 恢复 a、b。宽度由输入 lane 数确定，不接收 width、mask 或 mode 参数；两个输出都可独立使用。
+
+**调用示例**
+
+a、b 都是 64 lanes 的逻辑谓词。
+
+```python
+@tla.jit
+def example():
+    with tla.scope.simd():
+        a = tla.simd.pge(32, 64)
+        b = tla.simd.pge(16, 64)
+        first, second = tla.simd.pdintlv(a, b)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3040)。AVE 双结果契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L481)。
+
+仓库测试：[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L33)、[predicate_ops.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/predicate_ops.py#L176)。
 
 <a name="api-tla-simd-pld"></a>
 
@@ -2154,9 +2429,39 @@ def example(a_ub):
 
 ## tla.simd.vgatherb
 
-**提案。** 当前源码未找到对应入口；签名和目标约束待评审。
+签名：`tla.simd.vgatherb(base, index, mask=None)`
 
-原始提案：`def vgatherb( base: tla.buffer, index: tla.vector, mask=None, ) -> tla.vector`
+实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
+
+返回：64 lanes、与 base 同 dtype 的数据向量。
+
+编译表示：ave.hir.vgatherb。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `base` | 块读取的基地址 | tla.buffer / buffer_access | UB、一维连续；int32 / uint32 / float32 | buf 等价于 buf[0]；base 下标及视图偏移的单位为元素。 | 必填 |
+| `index` | 八个块起点相对 base 的字节偏移 | tla.vector | uint32，64 lanes；只使用前 8 个索引 | 使用的偏移必须是 4 的倍数；允许重复块。每个活跃输出对应的地址须在缓冲区内。 | 必填 |
+| `mask` | 选择实际读取的输出元素 | tla.vector（int1）或 None | 64 lanes | 每个输出元素一个 mask，非每块一个；false 不读取且输出零。 | None |
+
+这是 block gather：按 index[0:8] 收集八个 32 字节块，每块包含 8 个 32 位元素。对活跃输出 i，result[i] = base[index[i // 8] // 4 + i % 8]。它与 vgather 的逐元素索引、元素偏移单位不同。
+
+4 字节对齐是接口要求，不要求块起点一定按 32 字节对齐；现有专用用例使用 32 字节对齐的块起点。AVE 内部组合现有寄存器算子与带 mask 的 gather 来落实逐输出元素的屏蔽。没有 mode 参数，不会自动检查运行时索引边界。
+
+**调用示例**
+
+x_ub 为 float32 连续 UB，index_ub 为 64 个 uint32；前 8 个索引为合法块起点的字节偏移，八块都在可读范围内。
+
+```python
+@tla.jit
+def example(x_ub, index_ub):
+    with tla.scope.simd():
+        index = tla.simd.vlds(index_ub[0])
+        result = tla.simd.vgatherb(x_ub[0], index)
+```
+
+源码：[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L967)。AVE 块及 mask 契约：[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L192)。
+
+仓库测试：[memory_completion.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L53)。
 
 <a name="api-tla-simd-vabsdif"></a>
 
