@@ -289,3 +289,15 @@ AVE 通过现有寄存器操作展开索引并调用 masked gather，因此旧�
 - 确认是否纳入本轮规格并补齐目标实现与可验证的签名。
 
 结论：待决。
+
+<a name="simd-081"></a>
+
+## SIMD-081 · tla.simd.membar
+
+[查看规格](../spec/simd.md#api-tla-simd-membar)
+
+- 规格已把 `scope` 定为枚举 `tla.simd.SCOPE`（16 个成员，与 `ave.hir.membar` 的 i32 编码 0–15 一一对应），不再按字符串描述。
+- 实现现状：`tla.simd.membar(scope)` 仍只接受字符串（内部 `str(scope).upper()` 后交给 C++ 白名单校验），没有 `SCOPE` 常量类。
+- 待办：前端补 `class SCOPE` 及取值校验（非法值报错）；补完后规格无需再改。
+
+结论：待决。
