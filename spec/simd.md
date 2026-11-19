@@ -59,7 +59,7 @@ def example(x_ub, y_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `scope` | 指定执行域或地址空间 | 编译期 str | VV_ALL / VST_VLD / VLD_VST / VST_VST / VS_ALL / VST_LD / VLD_ST / VST_ST / SV_ALL / ST_VLD / LD_VST / ST_VST / SS_ALL / ST_LD / LD_ST / ST_ST | SIMD VF 内的标量或向量 load/store 屏障，按访问顺序选择。不在上表的取值直接报错。 | 必填 |
+| `scope` | 指定执行域或地址空间 | 编译期 tla.simd.SCOPE | SCOPE.VV_ALL / SCOPE.VST_VLD / SCOPE.VLD_VST / SCOPE.VST_VST / SCOPE.VS_ALL / SCOPE.VST_LD / SCOPE.VLD_ST / SCOPE.VST_ST / SCOPE.SV_ALL / SCOPE.ST_VLD / SCOPE.LD_VST / SCOPE.ST_VST / SCOPE.SS_ALL / SCOPE.ST_LD / SCOPE.LD_ST / SCOPE.ST_ST | SIMD VF 内的标量或向量 load/store 屏障，按访问顺序选择。不在上表的取值直接报错。 | 必填 |
 
 **调用示例**
 
@@ -71,7 +71,7 @@ def example(src_ub, dst_ub):
     with tla.scope.simd():
         values = tla.simd.vlds(src_ub[0])
         tla.simd.vsts(dst_ub[0], values, dist='NORM_B32')
-        tla.simd.membar('VST_VLD')
+        tla.simd.membar(tla.simd.SCOPE.VST_VLD)
         next_values = tla.simd.vlds(dst_ub[0])
 ```
 
