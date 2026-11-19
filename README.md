@@ -126,8 +126,8 @@
 
 | 接口 | 状态 | 用途 | 评审 | 源码 | 设计 | 实现 |
 | --- | :---: | --- | :---: | :---: | :---: | :---: |
-| [tla.scope.simt](spec/simt.md#api-tla-scope-simt) | 待&#8288;转&#8288;测 | 拟构造 SIMT VF 执行域 | [1&nbsp;项&#8288;待&#8288;决](tracking/simt.md#simt-001) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 宋&#8288;尧&#8288;飞 | 宋&#8288;尧&#8288;飞 |
-| [tla.simt.to_ptr](spec/simt.md#api-tla-simt-to-ptr) | 待&#8288;转&#8288;测 | 拟将 tla.buffer 转为 Triton pointer | [1&nbsp;项&#8288;待&#8288;决](tracking/simt.md#simt-007) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 宋&#8288;尧&#8288;飞 | 宋&#8288;尧&#8288;飞 |
+| [tla.scope.simt](spec/simt.md#api-tla-scope-simt) | 不&#8288;转&#8288;测 | 拟构造 SIMT VF 执行域 | [1&nbsp;项&#8288;待&#8288;决](tracking/simt.md#simt-001) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 宋&#8288;尧&#8288;飞 | 宋&#8288;尧&#8288;飞 |
+| [tla.simt.to_ptr](spec/simt.md#api-tla-simt-to-ptr) | 不&#8288;转&#8288;测 | 拟将 tla.buffer 转为 Triton pointer | [1&nbsp;项&#8288;待&#8288;决](tracking/simt.md#simt-007) | 未&#8288;找&#8288;到&#8288;实&#8288;现 | 宋&#8288;尧&#8288;飞 | 宋&#8288;尧&#8288;飞 |
 
 <a name="dfx-index"></a>
 
