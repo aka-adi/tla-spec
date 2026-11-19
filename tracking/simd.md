@@ -10,7 +10,7 @@
 
 规格依据为 [TLA d54604c1133d](https://github.com/wzy1214/triton-ascend/tree/d54604c1133df2631c6b32d8649eea79c6b2c975) 与其配套 [AscendNPU-IR bd88eea996b4](https://gitcode.com/Ascend/AscendNPU-IR/tree/bd88eea996b49aee9898465b77815bb32f762bb6)，核对了公开入口、builder、AVE 类型约束及 lowering。各小节提供固定提交的源码和用例链接；开发分支已实现不等于主线已合入或完成转测。
 
-在核对的 [main-dev ff7b02c72795](https://github.com/triton-lang/triton-ascend/tree/ff7b02c727951aa2f279918121025a7decfeb28a) 中，这 10 个接口尚无公开入口；不能以开发分支实现认定该主线基线可执行。
+在本次核对的 [main-dev 0227cdebc794](https://github.com/triton-lang/triton-ascend/tree/0227cdebc7940f38cbe67007110a44fe2434ec94) 中，这 10 个接口尚无公开入口；不能以开发分支实现认定该主线基线可执行。该主线的 SIMD 前端与上一轮 `ff7b02c72795` 相同，配套 AscendNPU-IR 仍为 `bd228faec3b5`。
 
 本次仅作源码与文档核对，未重新编译或运行真卡。引用用例不等于本次执行通过；既有联调记录限于 Ascend950 / Process，不能外推至其他目标、后端或最新主线合并版本。
 
@@ -44,7 +44,11 @@
 
 [memory_completion.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L68) 目前覆盖 int32、float32；前端未限制其他 dtype，但不能据此声明完整执行支持。后续需补逐类型、溢出及浮点特殊值矩阵。
 
-结论：开发分支已提供入口，主线合入仍待确认；其他类型的可执行覆盖待补，规格先写明已核对范围。
+多后端：AVE [Ascend960 分支](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/lib/Conversion/HIVMAVEToAVEIntrin/HIVMAVEToAVEIntrin.cpp#L2122) 已组合带 mask 的 `vcgaddv2` 与不带 mask 的 `vcaddv2`，由 AVE 隐藏指令差异。检视中的 `vcgadd2` 在此代码中拼作 `vcgaddv2`。这允许保留 TLA 签名，但需验证 lane 0、输出 dtype、全假 / 非前缀 mask、溢出及浮点顺序；不能只发汇总阶段的 vcaddv2。
+
+A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，以及是否采用上述 Ascend960 / dav-920r1 路径。源码中的目标名称不能单独证明全部 A6 型号的支持；本次无 A6 编译或真卡结果。
+
+结论：vcadd 的公开语义可保留，AVE 已有多目标适配分支；设备覆盖及其他 dtype 待补，TLA 新入口主线合入仍待确认。
 
 <a name="simd-015"></a>
 
@@ -56,7 +60,9 @@
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3087)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
-结论：开发分支已提供入口，主线合入仍待确认，当前范围已写回规格；新增目标需要独立语义和验证。
+多后端：当前 [GroupReductionOp 目标检查](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/lib/Conversion/HIVMAVEToAVEIntrin/HIVMAVEToAVEIntrin.cpp#L5028) 仅接受 Ascend950。A6 / V2 需逐项核对每组源 lane、组数、结果位置、整数扩宽、mask 及空组值；若 AVE 能组合保持本接口八组语义，可复用签名。若要直接暴露新的原生分组，需新参数或新接口，不能静默改变现有结果布局。
+
+结论：950 开发实现边界已确认；A6 group 语义与适配待确认，当前不放开其他目标。
 
 <a name="simd-016"></a>
 
@@ -68,7 +74,9 @@
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3101)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
-结论：开发分支已提供入口，主线合入仍待确认，当前范围已写回规格；新增目标需要独立语义和验证。
+多后端：沿用 [SIMD-015](#simd-015) 的八组契约审查；另核对 V2 max 的组内成员、输出位置、全假组初值、NaN 和正负零选择。底层存在 vcgmaxv2 wrapper 不能证明它与本接口等价。
+
+结论：950 开发实现边界已确认；A6 group 语义与适配待确认，当前不放开其他目标。
 
 <a name="simd-017"></a>
 
@@ -80,7 +88,19 @@
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3112)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
-结论：开发分支已提供入口，主线合入仍待确认，当前范围已写回规格；新增目标需要独立语义和验证。
+多后端：沿用 [SIMD-015](#simd-015) 的八组契约审查；另核对 V2 min 的组内成员、输出位置、全假组初值、NaN 和正负零选择。底层存在 vcgminv2 wrapper 不能证明它与本接口等价。
+
+结论：950 开发实现边界已确认；A6 group 语义与适配待确认，当前不放开其他目标。
+
+<a name="simd-022"></a>
+
+## SIMD-022 · tla.simd.vcmps
+
+[查看规格](../spec/simd.md#api-tla-simd-vcmps)
+
+严格同型要求尚未完全实现：[vcmps](https://github.com/triton-lang/triton-ascend/blob/0227cdebc7940f38cbe67007110a44fe2434ec94/third_party/ascend/language/tla/simd.py#L2133) 先调用 vdup，[_make_scalar](https://github.com/triton-lang/triton-ascend/blob/0227cdebc7940f38cbe67007110a44fe2434ec94/third_party/ascend/language/tla/simd.py#L741) 遇到不同 dtype 的整数 tensor 会调用 cast。它不会像 vaxpy / vmuls 一样直接报 dtype 不一致；其他不匹配类型及非标量输入会抛 TypeError。
+
+结论：规格要求运行时标量与源向量 dtype 一致，不一致抛 TypeError，当前使用同型输入；将不同整数 dtype 改为拒绝需后续前端修改与回归，本次未修代码。
 
 <a name="simd-023"></a>
 
@@ -88,11 +108,16 @@
 
 [查看规格](../spec/simd.md#api-tla-simd-vcvt)
 
-- 按目标维护源/目标类型对 × 舍入 × 半寄存器选择（part）× mask 粒度的设备矩阵，不能用单一类型对代表全部转换。
+类型对与属性表已写回规格，依据 TLA `0227cdebc794` 与配套 AscendNPU-IR `bd228faec3b5`。主要实现边界：
 
-- `src`：按目标验证所有类型对的舍入、饱和和 lane 映射。
+- 不支持的类型对未统一在 TLA 前端拒绝。整数→整数直接抛 ValueError；同型浮点、float16↔bfloat16 等可能进入没有匹配的 AVE lowering。后续应按已公布白名单提前诊断，不应出现后端 fatal error。
+- round / sat / part 按类型对使用；例如 float16→int32 不传 sat，int32→float32 不传 part。ROUND 是 str 常量集合，当前参数名为 round；六个名称被前端接受，不代表每种指令都实现了全部舍入方式。sat 当前通过 bool 转换而非严格检查类型，非 bool 拒绝用例也需前端补齐。
+- FP8↔float32 有转换分支，但四路槽位与 EVEN / ODD 的关系、mask 和各目标舍入未完成验收；暂不列设备正例。
+- 64 位路径走 [AVE 库转换](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd228faec3b574ce116edb54ad8437355d630523/bishengir/lib/Conversion/HIVMAVEToStandard/HIVMAVEToStandard.cpp#L858)，不能仅凭直接 intrinsic 分支判定支持。[VecOpI64.cpp](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd228faec3b574ce116edb54ad8437355d630523/bishengir/lib/Template/lib/RegBase/Vector/VecOpI64.cpp#L24) 的 int64→float32 和 float32→int64 包装未使用调用者 mask，后者固定 RS_ENABLE；ROUND.O 未见对应分支。TLA 按总位数计算的输出 lane 与库的 2×VL 表示也需对齐。uint64↔float32 同样有库函数，仍需独立核对精度、lane、mask 与饱和，暂不列设备正例。
 
-结论：待决。
+现有专用测试只覆盖 int32↔float32 的部分 round / sat / mask，以及 float16↔float32 的 EVEN / ODD 与源 mask。其他类型对及 NaN / Inf / 非规格化数、边界溢出、ROUND.A / F / C / O 须按目标补测；不能由这几个用例外推整个矩阵。本次未执行编译或设备测试。
+
+结论：类型对范围已明确；前置诊断、FP8 / 64 位完整语义及各目标设备矩阵仍待完成。
 
 <a name="simd-032"></a>
 
