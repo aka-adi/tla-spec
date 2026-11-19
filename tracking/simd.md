@@ -14,6 +14,14 @@
 
 本次仅作源码与文档核对，未重新编译或运行真卡。引用用例不等于本次执行通过；既有联调记录限于 Ascend950 / Process，不能外推至其他目标、后端或最新主线合并版本。
 
+<a name="simd-enum-parameters"></a>
+
+## SIMD 枚举参数
+
+规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
+
+实现基线 `0227cde` / `d54604c` 中，PAT / ROUND / PART / POS 仍是字符串常量集合，新增枚举尚未提供。待前端补枚举定义、成员校验及字符串拒绝用例；本次仅更新规格，未修改代码或执行设备验证。
+
 <a name="simd-011"></a>
 
 ## SIMD-011 · tla.simd.vadds

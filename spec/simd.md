@@ -2,6 +2,8 @@
 
 [返回接口目录](../README.md)
 
+PAT / ROUND / PART / POS 等枚举尚待前端适配，见[枚举参数跟踪](../tracking/simd.md#simd-enum-parameters)。
+
 <a name="api-tla-scope-vector"></a>
 
 ## tla.scope.vector
@@ -42,7 +44,7 @@ def example(x, dst_ub):
 def example(x_ub, y_ub):
     with tla.scope.simd():
         tile = tla.simd.vlds(x_ub[0])
-        tla.simd.vsts(y_ub[0], tile, dist='NORM_B32')
+        tla.simd.vsts(y_ub[0], tile, dist=tla.simd.STORE_DIST.NORM_B32)
 ```
 
 仓库测试：[tla_ut/scope/simd_only.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/simd_only.py#L25)。
@@ -70,7 +72,7 @@ def example(x_ub, y_ub):
 def example(src_ub, dst_ub):
     with tla.scope.simd():
         values = tla.simd.vlds(src_ub[0])
-        tla.simd.vsts(dst_ub[0], values, dist='NORM_B32')
+        tla.simd.vsts(dst_ub[0], values, dist=tla.simd.STORE_DIST.NORM_B32)
         tla.simd.membar(tla.simd.SCOPE.VST_VLD)
         next_values = tla.simd.vlds(dst_ub[0])
 ```
@@ -148,7 +150,7 @@ def example():
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `elem_width` | 数据元素位宽 | 编译期 int | 8 / 16 / 32 / 64 | 输出 int1 谓词，lane 数为 2048 ÷ elem_width。 | 必填 |
-| `dist` | 指令的分布模式 | 编译期 str（使用 PAT 常量） | PAT.ALL / VL1 / VL2 / VL3 / VL4 / VL8 / VL16 / VL32 / VL64 / VL128 / M3 / M4 / H / Q / ALLF（均为 PAT 成员） | 硬件图样需与谓词宽度配合。 | PAT.ALL |
+| `dist` | 谓词生成图样 | 编译期 tla.simd.PAT 枚举 | PAT.ALL / PAT.VL1 / PAT.VL2 / PAT.VL3 / PAT.VL4 / PAT.VL8 / PAT.VL16 / PAT.VL32 / PAT.VL64 / PAT.VL128 / PAT.M3 / PAT.M4 / PAT.H / PAT.Q / PAT.ALLF | 仅接受 PAT 枚举成员；图样须与谓词宽度匹配。 | PAT.ALL |
 
 **调用示例**
 
@@ -156,7 +158,7 @@ def example():
 @tla.jit
 def example():
     with tla.scope.simd():
-        mask = tla.simd.pset(32)
+        mask = tla.simd.pset(32, dist=tla.simd.PAT.ALL)
 ```
 
 仓库测试：[tla_ut/simd/pat_mask.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/pat_mask.py#L46)。
@@ -700,9 +702,9 @@ def example(a_ub):
 | `src` | 源数据 | tla.vector | 源→目标类型对见下表；使用对应 dtype 的满寄存器 | 不支持的组合不得作为有效调用；前端尚未统一提前拒绝。 | 必填 |
 | `target_dtype` | 目标元素类型 | 编译期 tl.dtype | 仅限下表列出的目标 dtype | 不接受字符串 dtype；int→int 不由本接口处理。 | 必填 |
 | `mask` | 选择参与转换的源元素 | tla.vector（int1）或 None | 数据类型：<br>B1：int1<br>lane 数与 src 相同 | None 为全真；非 int1 或 lane 数不匹配抛 ValueError。 | None |
-| `round` | 舍入方式 | 编译期 str（使用 ROUND 常量） | ROUND.R / A / F / C / Z / O | R：最近偶数；A：最近、半值远离零；F：向下；C：向上；Z：向零；O：round-to-odd。生效条件见类型对表；并非所有目标都支持六种模式。 | ROUND.R |
+| `round` | 舍入方式 | 编译期 tla.simd.ROUND 枚举 | ROUND.R / ROUND.A / ROUND.F / ROUND.C / ROUND.Z / ROUND.O | 仅接受 ROUND 枚举成员。R：最近偶数；A：最近、半值远离零；F：向下；C：向上；Z：向零；O：round-to-odd。生效条件见类型对表；并非所有目标都支持六种模式。 | ROUND.R |
 | `sat` | 请求转换饱和 | 编译期 bool | False / True | 仅在下表标注生效的路径上传入；不能据此承诺所有转换都钳位。 | True |
-| `part` | 选择偶数或奇数槽位 | 编译期 str（使用 PART 常量） | PART.EVEN / PART.ODD | 只在宽度变化且该路径使用 part 时生效；不是连续 LOWER / HIGHER 半区。 | PART.EVEN |
+| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART 枚举 | PART.EVEN / PART.ODD | 仅接受 PART 枚举成员。只在宽度变化且该路径使用 part 时生效；不是连续 LOWER / HIGHER 半区。 | PART.EVEN |
 | `mode` | 结果模式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING | MODE.MERGING 抛 ValueError。 | MODE.ZEROING |
 
 **源→目标类型对**
@@ -799,7 +801,7 @@ def example(a_ub, b_ub):
 | `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
-| `precision` | 精度和 FTZ 方式 | 编译期 str（闭集） | None / ftz_true / exact / vdiv_0ulp_ftz_true | exact 路径仅支持 float32。vexp 的 ftz_false 路径会拒绝。只接受上表取值，其它精度档直接报错。 | None |
+| `precision` | 精度和 FTZ 方式 | 编译期 tla.simd.PRECISION 枚举或 None | None / PRECISION.FTZ_TRUE / PRECISION.EXACT / PRECISION.VDIV_0ULP_FTZ_TRUE | 仅接受上述枚举成员或 None。None 与 FTZ_TRUE 使用默认路径；EXACT / VDIV_0ULP_FTZ_TRUE 仅支持 float32。 | None |
 
 **调用示例**
 
@@ -811,7 +813,7 @@ def example(a_ub, b_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
         b = tla.simd.vlds(b_ub[0])
-        result = tla.simd.vdiv(a, b)
+        result = tla.simd.vdiv(a, b, precision=tla.simd.PRECISION.FTZ_TRUE)
 ```
 
 仓库测试：[tla_ut/simd/elementwise.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/elementwise.py#L57)。
@@ -858,7 +860,7 @@ def example():
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：float8e4m3fn / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `pos` | 选择广播的源 lane | 编译期 tla.simd.POS | POS.LOWEST / POS.HIGHEST | 选择原向量的第一个或最后一个 lane。 | POS.LOWEST |
+| `pos` | 选择广播的源 lane | 编译期 tla.simd.POS 枚举 | POS.LOWEST / POS.HIGHEST | 仅接受 POS 枚举成员。选择原向量的第一个或最后一个 lane。 | POS.LOWEST |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
@@ -870,7 +872,7 @@ def example():
 def example(a_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
-        result = tla.simd.vdupv(a)
+        result = tla.simd.vdupv(a, pos=tla.simd.POS.LOWEST)
 ```
 
 仓库测试：[tla_ut/simd/simd_tail.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/simd_tail.py#L106)。
@@ -890,7 +892,7 @@ def example(a_ub):
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
-| `precision` | 精度和 FTZ 方式 | 编译期 str（闭集） | None / ftz_true | exact 路径仅支持 float32。vexp 的 ftz_false 路径会拒绝。只接受上表取值，其它精度档直接报错。 | None |
+| `precision` | 精度和 FTZ 方式 | 编译期 tla.simd.PRECISION 枚举或 None | None / PRECISION.FTZ_TRUE | 仅接受上述枚举成员或 None，均使用目标 SFU；不支持保留非规格化数的精度路径。 | None |
 
 **调用示例**
 
@@ -901,7 +903,7 @@ def example(a_ub):
 def example(a_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
-        result = tla.simd.vexp(a)
+        result = tla.simd.vexp(a, precision=tla.simd.PRECISION.FTZ_TRUE)
 ```
 
 仓库测试：[tla_ut/simd/elementwise.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/elementwise.py#L61)。
@@ -1034,7 +1036,7 @@ def example(x_ub, indices_ub):
 
 ## tla.simd.vld2
 
-签名：`tla.simd.vld2(src, dist='DINTLV_B16', off=None)`
+签名：`tla.simd.vld2(src, dist=tla.simd.LOAD_DIST.DINTLV_B16, off=None)`
 
 实现状态：AVE 开发分支已实现；提交和验证边界见[实现基线](../tracking/simd.md#simd-baseline)。
 
@@ -1045,7 +1047,7 @@ def example(x_ub, indices_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 连续读取的起始地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B8：不支持<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 一维连续；buf 等价于 buf[0]；起始地址后必须能完整读取两个寄存器。 | 必填 |
-| `dist` | 加载后去交错的元素宽度 | 编译期 str | DINTLV_B16 / DINTLV_B32 | 必须与 src 元素位宽一致；32 位数据需显式传 DINTLV_B32。 | 'DINTLV_B16' |
+| `dist` | 加载后去交错的元素宽度 | 编译期 tla.simd.LOAD_DIST 枚举 | LOAD_DIST.DINTLV_B16 / LOAD_DIST.DINTLV_B32 | 仅接受上述枚举成员；须与 src 元素位宽一致，32 位数据传 LOAD_DIST.DINTLV_B32。 | LOAD_DIST.DINTLV_B16 |
 | `off` | 在 src 基础上再增加的偏移 | 整数常量 / 整数标量 / None | 单位为元素 | 最终范围由 src 下标与 off 共同决定；动态偏移也必须满足边界。 | None（不增加偏移） |
 
 设每个寄存器有 N 个元素，从最终起点连续读 2N 个元素：even[i] 取第 2i 个，odd[i] 取第 2i+1 个。16 位数据 N=128，32 位数据 N=64。无 mask，也不更新地址。
@@ -1060,7 +1062,7 @@ x_ub 为连续 128 个 float32 元素，满足完整读取范围。
 @tla.jit
 def example(x_ub):
     with tla.scope.simd():
-        even, odd = tla.simd.vld2(x_ub[0], dist='DINTLV_B32')
+        even, odd = tla.simd.vld2(x_ub[0], dist=tla.simd.LOAD_DIST.DINTLV_B32)
 ```
 
 仓库测试：[memory_completion.py](https://github.com/triton-lang/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L51)。
@@ -1453,7 +1455,7 @@ def example(a_ub, b_ub):
 
 ## tla.simd.vpack
 
-签名：`tla.simd.vpack(src, part='part_even')`
+签名：`tla.simd.vpack(src, part=tla.simd.PART.EVEN)`
 
 返回：tla.vector。
 
@@ -1462,7 +1464,7 @@ def example(a_ub, b_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | int16/uint16 → int8/uint8，int32/uint32 → int16/uint16。结果 2×输入 lanes，非选中槽位未指定。float16 / bfloat16 / fp8 / 64 位整数不支持。 | 必填 |
-| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART | PART.EVEN / PART.ODD | 按转换或 packing 的槽位规则解释；PART.LOWER / PART.HIGHER 不属于本接口，传入直接报错。 | 'part_even' |
+| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART 枚举 | PART.EVEN / PART.ODD | 仅接受 PART 枚举成员。按转换或 packing 的槽位规则解释；PART.LOWER / PART.HIGHER 不属于本接口，传入直接报错。 | PART.EVEN |
 
 **调用示例**
 
@@ -1473,7 +1475,7 @@ def example(a_ub, b_ub):
 def example(a_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
-        result = tla.simd.vpack(a)
+        result = tla.simd.vpack(a, part=tla.simd.PART.EVEN)
 ```
 
 仓库测试：[tla_ut/simd/vpack.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vpack.py#L24)。
@@ -1705,7 +1707,7 @@ def example(a_ub, b_ub):
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
-| `precision` | 精度和 FTZ 方式 | 编译期 str（闭集） | None / ftz_true | 使用目标 SFU；只接受上表取值，其它精度档直接报错。 | None |
+| `precision` | 精度和 FTZ 方式 | 编译期 tla.simd.PRECISION 枚举或 None | None / PRECISION.FTZ_TRUE | 仅接受上述枚举成员或 None，均使用目标 SFU。 | None |
 
 **调用示例**
 
@@ -1716,7 +1718,7 @@ def example(a_ub, b_ub):
 def example(a_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
-        result = tla.simd.vsqrt(a)
+        result = tla.simd.vsqrt(a, precision=tla.simd.PRECISION.FTZ_TRUE)
 ```
 
 仓库测试：[tla_ut/simd/vsqrt.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vsqrt.py#L47)。
@@ -1768,7 +1770,7 @@ def example(x_ub, y_ub):
 | `ptr` | 缓冲区或索引得到的地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 普通 NORM/ONEPT 形式使用与写值一致的元素类型。目标范围须容纳分布产生的写入。 | 必填 |
 | `offsets_or_val` | 省略 val 时是待写入值，提供 val 时是显式偏移 | 整数序列 / tla.vector | 偏移按元素计<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 偏移元数匹配地址秩。省略 val 时第二个参数是写值。 | 必填 |
 | `val` | 待存入的向量或谓词 | tla.vector 或 None | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 偏移元数匹配地址秩。省略 val 时第二个参数是写值。 | None |
-| `dist` | 指令的分布模式 | 编译期 str 或 None | None（NORM_B32） / NORM_B8 / NORM_B16 / NORM_B32 / NORM_B64 / ONEPT_B8 / ONEPT_B16 / ONEPT_B32 / ONEPT_B64 | 分布后缀须与指令所需位宽对应。ONEPT 只存一个元素。packing 和通道合并需要单独验证源、目的与目标组合。 | None |
+| `dist` | 指令的分布模式 | 编译期 tla.simd.STORE_DIST 枚举或 None | None（STORE_DIST.NORM_B32） / STORE_DIST.NORM_B8 / STORE_DIST.NORM_B16 / STORE_DIST.NORM_B32 / STORE_DIST.NORM_B64 / STORE_DIST.ONEPT_B8 / STORE_DIST.ONEPT_B16 / STORE_DIST.ONEPT_B32 / STORE_DIST.ONEPT_B64 | 仅接受上述枚举成员或 None。分布后缀须与指令所需位宽对应。ONEPT 只存一个元素。packing 和通道合并需要单独验证源、目的与目标组合。 | None |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 
 **调用示例**
@@ -1780,7 +1782,7 @@ def example(x_ub, y_ub):
 def example(x_ub, y_ub):
     with tla.scope.simd():
         values = tla.simd.vlds(x_ub[0])
-        tla.simd.vsts(y_ub[0], values, dist='NORM_B32')
+        tla.simd.vsts(y_ub[0], values, dist=tla.simd.STORE_DIST.NORM_B32)
 ```
 
 仓库测试：[tla_ut/scope/simd_only.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/simd_only.py#L27)。
@@ -1978,7 +1980,7 @@ def example():
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源逻辑谓词 | tla.vector（int1） | 数据类型：<br>B1：int1<br>lane 数：64 / 128 | lane 表示逻辑布尔元素；物理寄存器 padding 不参与接口语义。 | 必填 |
-| `part` | 选择连续的下半区或上半区 | 编译期 str（使用 PART 常量） | PART.LOWER / PART.HIGHER | 不接受 EVEN / ODD。 | PART.LOWER |
+| `part` | 选择连续的下半区或上半区 | 编译期 tla.simd.PART 枚举 | PART.LOWER / PART.HIGHER | 仅接受 PART.LOWER / PART.HIGHER；不接受 PART.EVEN / PART.ODD。 | PART.LOWER |
 
 设源有 N 个元素，输出有 2N 个。LOWER 将 src 放在前 N 个位置，HIGHER 放在后 N 个位置，另一半全部为 false。例如 128 个 true 做 LOWER pack 后得到前 128 个 true、后 128 个 false。
 
@@ -2013,7 +2015,7 @@ def example():
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源逻辑谓词 | tla.vector（int1） | 数据类型：<br>B1：int1<br>lane 数：128 / 256 | lane 表示逻辑布尔元素；物理寄存器 padding 不参与接口语义。 | 必填 |
-| `part` | 选择连续的下半区或上半区 | 编译期 str（使用 PART 常量） | PART.LOWER / PART.HIGHER | 不接受 EVEN / ODD。 | PART.LOWER |
+| `part` | 选择连续的下半区或上半区 | 编译期 tla.simd.PART 枚举 | PART.LOWER / PART.HIGHER | 仅接受 PART.LOWER / PART.HIGHER；不接受 PART.EVEN / PART.ODD。 | PART.LOWER |
 
 从 N 个源元素中取连续 N/2 个：LOWER 取 src[0:N/2]，HIGHER 取 src[N/2:N]；保留选中元素的布尔值和顺序。
 
@@ -2113,7 +2115,7 @@ def example():
 
 ## tla.simd.pld
 
-签名：`tla.simd.pld(ptr, offsets=None, *, width=8, dist='NORM')`
+签名：`tla.simd.pld(ptr, offsets=None, *, width=8, dist=tla.simd.PRED_DIST.NORM)`
 
 返回：谓词向量。
 
@@ -2124,7 +2126,7 @@ def example():
 | `ptr` | 缓冲区或索引得到的地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B8：int8 / uint8<br>B16：不支持<br>B32：不支持<br>B64：不支持 | 一维连续字节缓冲区，实际地址需 32 字节对齐。NORM/US 读 32 字节，DS 读 64 字节。 | 必填 |
 | `offsets` | 基于源地址或视图的元素偏移 | 整数序列或 None | 偏移按元素计<br>整数偏移或 None | 地址需 32 字节对齐。None 使用零偏移。 | None |
 | `width` | 数据 lane 的逻辑位宽 | 编译期 int | 8 / 16 / 32 | 按逻辑元素位宽选择谓词密度。 | 8 |
-| `dist` | 指令的分布模式 | 编译期 str | NORM / US / DS | NORM 读取连续位。US 读第 floor(i/2) 位，DS 读第 2i 位。 | 'NORM' |
+| `dist` | 指令的分布模式 | 编译期 tla.simd.PRED_DIST 枚举 | PRED_DIST.NORM / PRED_DIST.US / PRED_DIST.DS | 仅接受 PRED_DIST 枚举成员。NORM 读取连续位，US 读第 floor(i/2) 位，DS 读第 2i 位。 | PRED_DIST.NORM |
 
 **调用示例**
 
@@ -2134,7 +2136,7 @@ mask_ub 为 32 字节对齐的 UB 字节缓冲区。
 @tla.jit
 def example(mask_ub):
     with tla.scope.simd():
-        mask = tla.simd.pld(mask_ub, width=32)
+        mask = tla.simd.pld(mask_ub, width=32, dist=tla.simd.PRED_DIST.NORM)
 ```
 
 仓库测试：[tla_ut/simd/pld.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/pld.py#L40)。
@@ -2359,7 +2361,7 @@ def example(a_ub, out_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
         sums = tla.simd.vcpadd(a)
-        tla.simd.vsts(out_ub[0], sums, dist='NORM_B32')
+        tla.simd.vsts(out_ub[0], sums, dist=tla.simd.STORE_DIST.NORM_B32)
 ```
 
 仓库测试：[tla_ut/simd/vcpadd.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/vcpadd.py#L13)。
@@ -2422,7 +2424,7 @@ def example(a_ub):
 def example(out_ub):
     with tla.scope.simd():
         counts = tla.simd.vusqz(tla.simd.pge(32, 64))
-        tla.simd.vsts(out_ub[0], counts, dist='NORM_B32')
+        tla.simd.vsts(out_ub[0], counts, dist=tla.simd.STORE_DIST.NORM_B32)
 ```
 
 仓库测试：[tla_ut/simd/vusqz.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/vusqz.py#L13)。
@@ -2431,7 +2433,7 @@ def example(out_ub):
 
 ## tla.simd.vunpack
 
-签名：`tla.simd.vunpack(src, target_dtype, mask=None, part=tla.simd.PART.EVEN, pp='pp0', signed=False, mode=tla.simd.MODE.ZEROING)`
+签名：`tla.simd.vunpack(src, target_dtype, mask=None, part=tla.simd.PART.EVEN, pp=tla.simd.PP.PP0, signed=False, mode=tla.simd.MODE.ZEROING)`
 
 返回：tla.vector。
 
@@ -2442,8 +2444,8 @@ def example(out_ub):
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：不支持<br>B64：不支持 | 满寄存器 8→16、8→32 或 16→32，mask 对应输出 lanes。2 倍扩展用 part，4 倍扩展用 pp。 | 必填 |
 | `target_dtype` | 目标元素类型 | 编译期 tl.dtype | 数据类型：<br>B8：不支持<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 满寄存器 8→16、8→32 或 16→32，mask 对应输出 lanes。2 倍扩展用 part，4 倍扩展用 pp。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。按输出 lane 匹配。 | None |
-| `part` | 选择偶数或奇数槽位 | 编译期 str（使用 PART 常量） | PART.EVEN / PART.ODD | 按转换或 packing 的槽位规则解释。 | PART.EVEN |
-| `pp` | 选择四路布局中的槽位 | 编译期 str | pp0 / pp1 / pp2 / pp3 | 用于 4 倍扩展。 | 'pp0' |
+| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART 枚举 | PART.EVEN / PART.ODD | 仅接受上述 PART 枚举成员。按转换或 packing 的槽位规则解释。 | PART.EVEN |
+| `pp` | 选择四路布局中的槽位 | 编译期 tla.simd.PP 枚举 | PP.PP0 / PP.PP1 / PP.PP2 / PP.PP3 | 仅接受 PP 枚举成员；用于 4 倍扩展，四个成员分别选择源位置 4i、4i+1、4i+2、4i+3。 | PP.PP0 |
 | `signed` | 是否按有符号值扩展 | 编译期 bool | False / True | True 符号扩展，False 零扩展。 | False |
 | `mode` | 选择操作模式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
