@@ -12,7 +12,7 @@
 
 返回：tla.buffer。
 
-分配由 `space` 指定地址空间。多缓冲版本数通过 [tla.annotate_multi_buffer](schedule.md#api-tla-annotate-multi-buffer) 单独标注。当前实现仍接收 `versions` 和 `scope`，签名变更见 [MEMORY-002](../tracking/memory.md#memory-002)。
+分配由 `space` 指定地址空间。多缓冲版本数通过 [tla.annotate_multi_buffer](schedule.md#api-tla-annotate-multi-buffer) 单独标注。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ def example(x_ub, y):
 
 返回：tla.buffer。
 
-视图固定为 GM，不提供地址空间参数。`src` 须为 GM kernel 指针，偏移按有符号 64 位元素索引计算，保留指针来源，并允许运行时标量参与指针地址计算。结果经 tt.make_tensor_ptr 生成 memref.reinterpret_cast。指针源的访问范围由调用者保证。不接受 tla.buffer 源，已有缓冲区的切片使用 [tla.subview](#api-tla-subview)，改秩使用 [tla.reshape](#api-tla-reshape)。
+视图固定为 GM，不提供地址空间参数。`src` 须为 GM kernel 指针，偏移按有符号 64 位元素索引计算，保留指针来源，并允许运行时标量参与指针地址计算。指针源的访问范围由调用者保证。不接受 tla.buffer 源，已有缓冲区的切片使用 [tla.subview](#api-tla-subview)，改秩使用 [tla.reshape](#api-tla-reshape)。
 
 仅支持静态形状与静态步长：`shape` 和 `strides` 须为编译期正整数；`offsets` 可为编译期整数或运行时整数标量。
 
@@ -105,7 +105,7 @@ def example(x, dst_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.buffer | 地址空间：GM / UB / L1 / L0A / L0B / L0C；数据类型继承源缓冲区 | 同秩切片，结果与源共享存储，并保留源地址空间。 | 必填 |
+| `src` | 源数据 | tla.buffer | 地址空间：GM / UB / L1 / L0C；数据类型继承源缓冲区 | 同秩切片，结果与源共享存储，并保留源地址空间。 | 必填 |
 | `offsets` | 相对于源视图的各轴逻辑元素偏移 | 编译期整数或整数标量 tl.tensor 组成的 tuple | 按元素计的整数偏移 | 维数须匹配。静态子视图越界拒绝，动态偏移由调用者保证。 | 必填 |
 | `sizes` | 各轴要截取的元素个数 | tuple[int, ...] / list[int] | 非空正整数组 | 各维须为编译期正整数，按元素计。 | 必填 |
 | `strides` | 各轴步长 | tuple[int, ...] / list[int] / None | 非空正整数组 / None | 各轴步长须为编译期正整数。与对应视图秩相同。省略时各轴相对步长为 1。结果 stride 为源 stride 与相对步长的乘积。 | None |
