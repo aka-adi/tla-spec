@@ -59,7 +59,7 @@ def example(x_ub, y_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `scope` | 指定执行域或地址空间 | 编译期 str | VV_ALL / VST_VLD / VLD_VST / VST_VST / VS_ALL / VST_LD / VLD_ST / VST_ST / SV_ALL / ST_VLD / LD_VST / ST_VST / SS_ALL / ST_LD / LD_ST / ST_ST | SIMD VF 内的标量或向量 load/store 屏障，按访问顺序选择。 | 必填 |
+| `scope` | 指定执行域或地址空间 | 编译期 str | VV_ALL / VST_VLD / VLD_VST / VST_VST / VS_ALL / VST_LD / VLD_ST / VST_ST / SV_ALL / ST_VLD / LD_VST / ST_VST / SS_ALL / ST_LD / LD_ST / ST_ST | SIMD VF 内的标量或向量 load/store 屏障，按访问顺序选择。不在上表的取值直接报错。 | 必填 |
 
 **调用示例**
 
@@ -200,9 +200,9 @@ def example():
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8<br>B16：int16 / float16<br>B32：int32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8<br>B16：int16 / float16<br>B32：int32 / float32<br>B64：int64 | 无符号整数输入被拒绝。lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -882,10 +882,10 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：float32<br>B64：不支持 | 发出融合 exp(lhs−rhs)，不能假定分步实现有相同舍入。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：float32<br>B64：不支持 | 发出融合 exp(lhs−rhs)，不能假定分步实现有相同舍入。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：float32<br>B64：不支持 | 发出融合 exp(lhs−rhs)，不能假定分步实现有相同舍入。两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：float32<br>B64：不支持 | 发出融合 exp(lhs−rhs)，不能假定分步实现有相同舍入。两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1202,10 +1202,10 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 标量常量按向量 dtype 构造，运行时标量需符合当前转换路径。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 必须为 Python 数值或 rank-0 tl.tensor；按 src 的元素类型构造：整数必须落在该 dtype 的取值范围内（如 int8 −128–127、uint8 0–255）；类型不可转换或超出范围直接报错。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1233,10 +1233,10 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1363,9 +1363,9 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1393,10 +1393,10 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1425,8 +1425,8 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | int16/uint16 → int8/uint8，int32/uint32 → int16/uint16。结果 2×输入 lanes，非选中槽位未指定。 | 必填 |
-| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART 常量或 str | part_even / part_odd | 按转换或 packing 的槽位规则解释。 | 'part_even' |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | int16/uint16 → int8/uint8，int32/uint32 → int16/uint16。结果 2×输入 lanes，非选中槽位未指定。float16 / bfloat16 / fp8 / 64 位整数不支持。 | 必填 |
+| `part` | 选择偶数或奇数槽位 | 编译期 tla.simd.PART | PART.EVEN / PART.ODD | 按转换或 packing 的槽位规则解释；PART.LOWER / PART.HIGHER 不属于本接口，传入直接报错。 | 'part_even' |
 
 **调用示例**
 
@@ -1454,9 +1454,9 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：int32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：int32 / float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1571,10 +1571,10 @@ def example(src_ub, indices_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1603,10 +1603,10 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / 标量整数 tl.tensor | 编译期值：−32768 至 32767 | 最终物化为 src 的元素类型。按元素位宽测试 0 至 B−1 的正常位移。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / 标量整数 tl.tensor | 编译期值：−32768 至 32767 | 必须为 Python 数值或 rank-0 tl.tensor；最终物化为 src 的元素类型，非整数标量或超出 int16 范围直接报错。按元素位宽测试 0 至 B−1 的正常位移。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1634,10 +1634,10 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1666,10 +1666,10 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
-| `precision` | 精度和 FTZ 方式 | 编译期 str 或 None | None / ftz_true | 使用目标 SFU。 | None |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `precision` | 精度和 FTZ 方式 | 编译期 str（闭集） | None / ftz_true | 使用目标 SFU；只接受上表取值，其它精度档直接报错。 | None |
 
 **调用示例**
 
@@ -1761,10 +1761,10 @@ def example(x_ub, y_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -1793,10 +1793,10 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 参与计算的向量需同 dtype、同 lane 数。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 B64 走 RegBase 库函数，使用 2×VL 表示，仅支持 int64。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
@@ -2145,8 +2145,8 @@ def example(mask_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为 64 lanes。返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为 64 lanes。返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为满 64 lanes 且同 dtype，不一致直接报错；返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为满 64 lanes 且同 dtype，不一致直接报错；返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：64 | None 生成全真 mask。 | None |
 
 **调用示例**
@@ -2176,7 +2176,7 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 左操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 必须为满 64 lanes，与 `src1` 同 dtype。 | 必填 |
+| `src0` | 左操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 必须为满 64 lanes，与 `src1` 同 dtype。不一致直接报错。 | 必填 |
 | `src1` | 右操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 同上。 | 必填 |
 | `carry` | 输入进位谓词 | tla.vector（int1 谓词） | 数据类型：int1<br>lane 数：64 | 必填；lane 为真表示该 lane 加 1。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词）或 None | 数据类型：int1<br>lane 数：64 | None 生成全真 mask；inactive lane 的 sum 为 0、carry_out 为假。 | None |
@@ -2210,7 +2210,7 @@ def example(a_ub, b_ub, out_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 左操作数（被减数） | tla.vector | 数据类型：<br>B32：int32 / uint32 | 必须为满 64 lanes，与 `src1` 同 dtype。 | 必填 |
+| `src0` | 左操作数（被减数） | tla.vector | 数据类型：<br>B32：int32 / uint32 | 必须为满 64 lanes，与 `src1` 同 dtype。不一致直接报错。 | 必填 |
 | `src1` | 右操作数（减数） | tla.vector | 数据类型：<br>B32：int32 / uint32 | 同上。 | 必填 |
 | `borrow` | 输入借位谓词 | tla.vector（int1 谓词） | 数据类型：int1<br>lane 数：64 | 必填；lane 为真表示该 lane 减 1。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词）或 None | 数据类型：int1<br>lane 数：64 | None 生成全真 mask；inactive lane 的 diff 为 0、borrow_out 为假。 | None |
@@ -2246,8 +2246,8 @@ def example(a_ub, b_ub, out_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `alpha` | 负值分支的斜率 | int / float / 标量 tl.tensor | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 斜率转换为 src 的 float16 或 float32。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `alpha` | 负值分支的斜率 | int / float / 标量 tl.tensor | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 必须为 Python 数值或 rank-0 tl.tensor；按 src 的元素类型构造，超出该类型量程按该类型舍入（float16 可能得到 inf），类型不可转换直接报错。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 
 **调用示例**
@@ -2276,8 +2276,8 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 
 **调用示例**
@@ -2309,7 +2309,7 @@ def example(a_ub, b_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B16：float16<br>B32：float32 | 必须为满寄存器：float16 取 128 lanes，float32 取 64 lanes。 | 必填 |
 | `mask` | 控制各源 lane 是否参与相加 | tla.vector（int1 谓词）或 None | 数据类型：int1<br>lane 数：与 `src` 一致 | None 生成全真 mask；未选中的输入 lane 按 0 参与。 | None |
-| `mode` | 未选中 lane 的输出约定 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | ZEROING 时 inactive lane 与结果上半部均为 0；MERGING 时 inactive lane 回填 `src`。 | MODE.ZEROING |
+| `mode` | 未选中 lane 的输出约定 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | ZEROING 时 inactive lane 与结果上半部均为 0；MERGING 时 inactive lane 回填 `src`。 | MODE.ZEROING |
 
 **语义**：结果 lane `j`（`j < N/2`）为 `src[2j] + src[2j+1]`，其余 lane 为 0。
 
@@ -2342,7 +2342,7 @@ def example(a_ub, out_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 待压缩的源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32 | 必须为满寄存器：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。 | 必填 |
 | `mask` | 选择活跃 lane 的谓词 | tla.vector（int1 谓词） | 数据类型：int1<br>lane 数：与 `src` 相同 | 必填，不接受 None。 | 必填 |
-| `mode` | 未选中 lane 的输出约定 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | ZEROING 时压缩后剩余的尾部 lane 为 0；MERGING 时 inactive lane 回填 `src`。 | MODE.ZEROING |
+| `mode` | 未选中 lane 的输出约定 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | ZEROING 时压缩后剩余的尾部 lane 为 0；MERGING 时 inactive lane 回填 `src`。 | MODE.ZEROING |
 
 **语义**：活跃 lane 按原顺序压到低位 lane，尾部置零。
 
@@ -2373,7 +2373,7 @@ def example(a_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `mask` | 活跃 lane 谓词 | tla.vector（int1 谓词） | 数据类型：int1<br>lane 数：等于结果 lane 数 | 必填。 | 必填 |
-| `dtype` | 结果元素类型 | 编译期 tla.dtype 或字符串 | int8 / uint8 / int16 / uint16 / int32 / uint32 | 决定结果位宽与 lane 数：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。 | 'u32'（uint32） |
+| `dtype` | 结果元素类型 | 编译期 tl.dtype | int8 / uint8 / int16 / uint16 / int32 / uint32 | 决定结果位宽与 lane 数：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。其它 dtype 直接报错。 | 'u32'（uint32） |
 
 **语义**：排他前缀计数。结果 lane `i` 为索引小于 `i` 的活跃 lane 个数。
 
@@ -2475,10 +2475,10 @@ def example(x_ub, index_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
+| `lhs` | 左操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
+| `rhs` | 右操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：float16<br>B32：float32<br>B64：不支持 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；lane 数上限为 2048 / 元素位宽（64 位元素为 4096）。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `mode` | 选择操作模式 | 编译期 tla.simd.MODE 或 str | ZEROING / MODE_ZEROING / MERGING / MODE_MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
+| `mode` | 选择操作模式 | 编译期 tla.simd.MODE | MODE.ZEROING / MODE.MERGING | MERGING 与 ZEROING 的 inactive 结果均为零。 | MODE.ZEROING |
 
 **调用示例**
 
