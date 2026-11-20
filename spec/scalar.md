@@ -123,7 +123,7 @@ def example(x, y):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `input` | 待转换的标量 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。 | 必填 |
+| `input` | 待转换的标量 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 / float64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。不支持将 `float64` 数值转换为更窄的浮点类型。在 Ascend950 上，运行时 `float64` 转整数仅支持等宽 `bitcast`。 | 必填 |
 | `dtype` | 元素类型 | 编译期 tl.dtype | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 不接受 bfloat16。按源和目标类型对执行 Triton cast。 | 必填 |
 | `fp_downcast_rounding` | 浮点窄化舍入模式 | 编译期 str 或 None | None / rtne / rtz | 仅用于 Triton 支持的浮点窄化类型对。 | None |
 | `bitcast` | 是否按位重解释 | 编译期 bool | False / True | True 需要等位宽。 | False |
