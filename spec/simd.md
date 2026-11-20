@@ -677,7 +677,16 @@ def example(a_ub):
 
 返回：tla.vector；8 / 16 / 32 位路径保持寄存器总位数，输出 lane 数为 `src.lanes × src位宽 ÷ dst位宽`。64 位路径暂不作此承诺，见下表。
 
-编译表示：ave.hir.vtruncf / ave.hir.vextf / ave.hir.vsitofp / ave.hir.vuitofp / ave.hir.vfptosi / ave.hir.vfptoui。
+编译表示：按源、目标 dtype 直接选择一个 AVE 转换 op。对应关系如下，具体支持的类型对见下文。
+
+| 转换方向 | AVE op |
+| --- | --- |
+| 浮点缩窄，如 float32 → float16 | `ave.hir.vtruncf` |
+| 浮点扩宽，如 float16 → float32 | `ave.hir.vextf` |
+| 有符号整数 → 浮点 | `ave.hir.vsitofp` |
+| 无符号整数 → 浮点 | `ave.hir.vuitofp` |
+| 浮点 → 有符号整数 | `ave.hir.vfptosi` |
+| 浮点 → 无符号整数 | `ave.hir.vfptoui` |
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
