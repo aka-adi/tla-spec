@@ -129,12 +129,12 @@ def example(x_ub, y):
 
 签名：`tla.fill(dst, value)`
 
-返回：None。将标量广播到整个目标缓冲区，编译表示为标量 `hivm.hir.vbrc`。
+返回：None。将同一个标量值写入目标缓冲区的每个元素。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `dst` | 待填充的缓冲区 | tla.buffer | UB；float32 / bfloat16 / int32；1D / 2D | 连续 row-major、offset=0 的直接分配或等价 reshape；元素数为正且不超过 UB 容量；允许非对齐尾部。 | 必填 |
-| `value` | 广播标量 | Python int / Python float | 仅限下表组合 | 不接受 Python bool 或 tensor（含标量 tl.tensor）。 | 必填 |
+| `dst` | 待填充的缓冲区 | tla.buffer | UB；float32 / bfloat16 / int32；1D / 2D | 连续、offset=0 的直接分配或等价 reshape；不支持 subview（含零偏移）、动态偏移或额外行间距。允许非对齐尾部。 | 必填 |
+| `value` | 广播标量 | Python int / Python float | 仅限下表组合 | 整数须在 [-2**31,2**31-1] 内；浮点目的按目的类型舍入。不接受 bool 或 tensor（含标量 tl.tensor）。 | 必填 |
 
 | 目的元素类型 | Python 常量 |
 | --- | --- |
@@ -142,8 +142,8 @@ def example(x_ub, y):
 | bfloat16 | int32 范围内的整数；暂不支持 Python float |
 | int32 | int32 范围内的整数；不接受 float |
 
-整数常量范围为 `[-2**31, 2**31-1]`，填充浮点目的时按目的类型舍入。当前仅提供 Python 常量输入，不提供运行时标量 tensor 输入或其隐式类型转换。
+**约束**
 
-目的仅提供直接 `tla.alloc` 或保持连续、零偏移的 `tla.reshape` 结果。暂不支持任何目的 `subview`（包括静态全零 offset）、非零或动态偏移、带行间距的非连续视图及其他地址空间。
-
-浮点常量按数值语义填充，不承诺负零符号或 NaN 载荷的位级保持。调用方须确保生产、消费及复用缓冲区的依赖有正确同步。
+- 长度：元素数为正，`元素数 × sizeof(dtype)` 不得超过目标实际分配及可用 UB 空间。
+- 数值：浮点常量按数值填充，不保证负零符号及 NaN 载荷的位级保持。
+- 同步：填充完成后才能消费数据，复用缓冲区前须保证先前消费者完成。

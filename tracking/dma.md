@@ -6,6 +6,16 @@
 
 GM↔UB 依据库上已有接口，以及 2026-11-18 的 `tla-programming-api.md` §4.1.2、§4.2.2、§4.3.1 及 `affinity-ir-contract.md` §2.6、§2.12 修订。后端核对范围为 Ascend950、NPUIR `65e061b2404c8808ead47d9a6be95e102c28c3c0`。
 
+<a name="dma-001"></a>
+
+## DMA-001 · tla.load_gm_to_l1
+
+[查看规格](../spec/dma.md#api-tla-load-gm-to-l1)
+
+结论：FP32→FP32 纳入待转测范围；逻辑 M 按 16、N 按 8 对齐，目的 NZ 内层为 `(16, 8)`。
+
+依据：AscendNPU-IR `0e7d8bb2d0d6a39b83996e909eee1b973685e164` 的 `Nd2NzCapabilityProfile.td` 中 C310 同类型能力，以及 `bishengir/lib/Template/lib/RegBase/Cube/compat/DMA/Cbuf/nd2nz.cpp` 的 `REGISTE_ND2NZ(gm, cbuf, 2, 4, float)`。模板以 `32 / sizeof(T)` 计算 C0，因此 FP32 为 8。核对范围为类型能力、目标模板及 TLA builder 路径；本次规格更新未新增设备精度验证。
+
 <a name="dma-002"></a>
 
 ## DMA-002 · tla.load_gm_to_ub
