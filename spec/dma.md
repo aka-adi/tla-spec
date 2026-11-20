@@ -14,8 +14,8 @@
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源矩阵 | tla.buffer | GM；float16 / bfloat16 / float32 | 二维矩阵，末维连续；行间距不小于列数，访问范围不得越界。 | 必填 |
-| `dst` | 目标矩阵 | tla.buffer | L1；与 src 类型相同 | 连续分块存放；以 `C = 32 / sizeof(dtype)` 计，逻辑 `(M,N)` 对应形状 `(N/C,M/16,16,C)`。 | 必填 |
+| `src` | 源矩阵 | tla.buffer | GM；float16 / bfloat16 / float32 | 二维矩阵，末维连续；行间距不小于列数，访问范围不得越界。float32 的有效起始地址（含视图偏移）、行间距及每行搬运宽度均须按 32B 对齐，即行间距和每行元素数为 8 的整数倍。 | 必填 |
+| `dst` | 目标矩阵 | tla.buffer | L1；与 src 类型相同 | 连续分块存放；以 `C = 32 / sizeof(dtype)` 计，逻辑 `(M,N)` 对应形状 `(N/C,M/16,16,C)`；float32 的有效起始地址（含视图偏移）须按 32B 对齐。 | 必填 |
 | `params` | 搬运配置 | tla.LoadGM2L1Params / None | 下列字段 | None 使用默认配置。 | None |
 | `params.enable_nd2nz` | 启用矩阵装载所需的数据重排 | 编译期 bool | True | 不提供关闭转换的路径；False 抛出 NotImplementedError，非 bool 抛出 TypeError。 | True |
 
