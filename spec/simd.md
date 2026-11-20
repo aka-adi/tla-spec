@@ -150,6 +150,10 @@ def example():
 | `elem_width` | 数据元素位宽 | 编译期 int | 8 / 16 / 32 / 64 | 输出 int1 谓词。elem_width 为 8、16、32、64 时，分别输出 256、128、64、32 个元素。 | 必填 |
 | `dist` | 谓词生成图样 | 编译期 tla.simd.PAT 枚举 | PAT.ALL / PAT.VL1 / PAT.VL2 / PAT.VL3 / PAT.VL4 / PAT.VL8 / PAT.VL16 / PAT.VL32 / PAT.VL64 / PAT.VL128 / PAT.M3 / PAT.M4 / PAT.H / PAT.Q / PAT.ALLF | 仅接受 PAT 枚举成员；图样须与谓词宽度匹配。 | PAT.ALL |
 
+`PAT.ALL` 全部为 true；`PAT.ALLF` 全部为 false；`PAT.VL1`～`PAT.VL128` 中，数字表示置 true 的前缀长度，不得超过谓词长度。`PAT.H`、`PAT.Q` 分别将前一半、前四分之一置 true，其余为 false。
+
+`pset(64)` 只有 32 个谓词元素，不能直接作为 64 元素数据向量的 mask。需要 64 个全真谓词时使用 `pge(64, 64)`。
+
 **调用示例**
 
 ```python
@@ -266,9 +270,11 @@ def example(a_ub, b_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 返回模 2³² 的和与进位谓词。比较按无符号解释。两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；每个向量最多包含：B32 64 个元素。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 返回模 2³² 的和与进位谓词。比较按无符号解释。两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；每个向量最多包含：B32 64 个元素。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype、同元素个数；不一致时报错。每个向量最多包含 64 个元素。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype、同元素个数；不一致时报错。每个向量最多包含 64 个元素。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
+
+和按 2³² 取模；按无符号数相加超过 2³²−1 时，进位为 true。mask 为 false 的位置返回 0 和 false。
 
 **调用示例**
 
@@ -362,9 +368,11 @@ def example(a_ub, b_ub):
 | --- | --- | --- | --- | --- | --- |
 | `acc` | 累加器 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 | 必填 |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | tensor 须为秩 0 且与源 dtype（含符号性）一致；dtype 不同抛 TypeError，非秩 0 抛 ValueError。整数源只接受非 bool 的整数常量，越出源 dtype 范围抛 ValueError。单 lane vector 不能作为标量输入。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持 | tensor 须为秩 0 且与 src 同 dtype；类型不符抛 TypeError，秩不符抛 ValueError。整数向量只接受整数常量（不含 bool），越界抛 ValueError；不接受 vector。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留 `acc` 对应位置的值。 | MODE.ZEROING |
+
+逐元素计算 `acc + src × scalar`，先乘后加；浮点运算不保证融合为一次舍入。
 
 **调用示例**
 
@@ -624,8 +632,8 @@ def example(a_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；每个向量最多包含：B8 256 个元素、B16 128 个元素、B32 64 个元素、B64 64 个元素。 | 必填 |
 | `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 两操作数必须同 dtype、同 lane 数，不一致直接报错，不做隐式转换或广播；每个向量最多包含：B8 256 个元素、B16 128 个元素、B32 64 个元素、B64 64 个元素。 | 必填 |
-| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `op` | 比较关系 | 编译期 tla.simd.CMP | CMP.EQ / CMP.NE / CMP.GT / CMP.GE / CMP.LT / CMP.LE / CMP.UGT / CMP.UGE / CMP.ULT / CMP.ULE | 有符号和无符号的有序比较按输入 dtype 区分。浮点使用浮点比较式。 | CMP.EQ |
+| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 表示全部参与；mask 为 false 的位置返回 false。 | None |
+| `op` | 比较关系 | 编译期 tla.simd.CMP 枚举 | CMP.EQ / CMP.NE / CMP.GT / CMP.GE / CMP.LT / CMP.LE / CMP.UGT / CMP.UGE / CMP.ULT / CMP.ULE | 仅接受 CMP 枚举成员。GT / GE / LT / LE 按输入 dtype 比较；UGT / UGE / ULT / ULE 按无符号位模式比较，只接受整数。 | CMP.EQ |
 
 **调用示例**
 
@@ -655,11 +663,11 @@ def example(a_ub, b_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 参与计算的向量需同 dtype、同 lane 数。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 标量 tensor 要求秩 0、与 src 同 dtype（含符号性）；常量按 src dtype 构造，整数越出源 dtype 范围抛 ValueError。不同整数 dtype 的当前实现例外见下文。 | 必填 |
-| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
-| `op` | 比较关系 | 编译期 tla.simd.CMP 枚举 | CMP.EQ / NE / GT / GE / LT / LE / UGT / UGE / ULT / ULE（均为 CMP 成员） | 有符号和无符号的有序比较按输入 dtype 区分。浮点使用浮点比较式。 | CMP.LT |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 标量 tensor 要求秩 0、与 src 同 dtype（含符号性）；常量按 src dtype 构造，整数越出源 dtype 范围抛 ValueError。不接受 vector。 | 必填 |
+| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 表示全部参与；mask 为 false 的位置返回 false。 | None |
+| `op` | 比较关系 | 编译期 tla.simd.CMP 枚举 | CMP.EQ / CMP.NE / CMP.GT / CMP.GE / CMP.LT / CMP.LE / CMP.UGT / CMP.UGE / CMP.ULT / CMP.ULE | 仅接受 CMP 枚举成员。GT / GE / LT / LE 按输入 dtype 比较；UGT / UGE / ULT / ULE 按无符号位模式比较，只接受整数。 | CMP.LT |
 
-运行时标量须与 src 同 dtype，否则应抛 TypeError。当前不同整数 dtype 仍会自动转换，待修复，见 [SIMD-022](../tracking/simd.md#simd-022)；非标量 tensor 及 vector 抛 TypeError。
+运行时标量须与 src 同 dtype，否则抛 TypeError；非标量 tensor 及 vector 也抛 TypeError。
 
 **调用示例**
 
@@ -673,7 +681,7 @@ def example(a_ub):
         result = tla.simd.vcmps(a, 2.0)
 ```
 
-仓库测试：[tla_ut/simd/pst.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/pst.py#L41)。
+仓库测试：[tla_ut/simd/vcmps.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vcmps.py#L36)。
 
 <a name="api-tla-simd-vcvt"></a>
 
@@ -745,8 +753,10 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。构造 SPARSE 去交错，返回两个同型值。 | 必填 |
-| `src2` | 第二个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。构造 SPARSE 去交错，返回两个同型值。 | 必填 |
+| `src1` | 第一个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。两个结果均与输入同型。 | 必填 |
+| `src2` | 第二个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。两个结果均与输入同型。 | 必填 |
+
+先拼接两个输入，再分别取偶数和奇数位置。
 
 **调用示例**
 
@@ -963,8 +973,10 @@ def example(x_ub, indices_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。构造 SPARSE 交错，返回两个同型值。 | 必填 |
-| `src2` | 第二个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。构造 SPARSE 交错，返回两个同型值。 | 必填 |
+| `src1` | 第一个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。两个结果均与输入同型。 | 必填 |
+| `src2` | 第二个输入向量 | tla.vector | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换。两个结果均与输入同型。 | 必填 |
+
+将两个输入逐元素交错，再按输入长度分成两个结果。
 
 **调用示例**
 
@@ -1012,6 +1024,38 @@ def example(x_ub, indices_ub):
 ```
 
 仓库测试：[tla_ut/simd/vld.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vld.py#L50)。
+
+<a name="api-tla-simd-vlds"></a>
+
+## tla.simd.vlds
+
+签名：`tla.simd.vlds(ptr, offsets=None, *, dist=tla.simd.LOAD_DIST.NORM, elem=None)`
+
+返回：tla.vector。8 / 16 / 32 / 64 位元素分别返回 256 / 128 / 64 / 64 个元素。
+
+编译表示：ave.hir.vload。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `ptr` | 读取的起始地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B8：int8 / uint8 / float8e4m3fn / float8e5m2<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 从起点按连续内存读取，不按 buffer 的逻辑行边界截断；读取范围不得越界。 | 必填 |
+| `offsets` | 各维度的起始下标 | 整数常量或整数标量的序列，或 None | 个数与 buffer 秩相同，单位为元素 | 使用 buf[i, ...] 时省略；直接传 buffer 时必填。 | None |
+| `dist` | 加载分布 | 编译期 tla.simd.LOAD_DIST 枚举 | LOAD_DIST.NORM / LOAD_DIST.BRC_B8 / LOAD_DIST.BRC_B16 / LOAD_DIST.BRC_B32 / LOAD_DIST.BRC_B64 | NORM 连续加载；BRC 读取起点的一个元素并广播，后缀须与元素位宽一致。 | LOAD_DIST.NORM |
+| `elem` | 返回向量的元素类型 | 编译期 tl.dtype 或 None | 与 ptr dtype 相同 | None 使用 buffer dtype；本接口不做数值转换。 | None |
+
+NORM 读取一个完整向量，起点按 32 字节对齐；BRC 只读取一个元素，起点按元素大小对齐。不接收 mask，不更新地址。按索引收集使用 [vgather](#api-tla-simd-vgather)，连续加载两个去交错结果使用 [vld2](#api-tla-simd-vld2)，按位读取谓词使用 [pld](#api-tla-simd-pld)。
+
+**调用示例**
+
+x_ub 为连续 64 个 float32 元素，起点按 32 字节对齐。
+
+```python
+@tla.jit
+def example(x_ub):
+    with tla.scope.simd():
+        values = tla.simd.vlds(x_ub[0])
+```
+
+仓库测试：[tla_ut/scope/simd_only.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/scope/simd_only.py#L26)。
 
 <a name="api-tla-simd-vld2"></a>
 
@@ -1061,6 +1105,8 @@ def example(x_ub):
 | `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留 `src` 对应位置的值。 | MODE.ZEROING |
 
 有限正数输入范围为 `0 < x ≤ 65504`（float16）或 `0 < x ≤ (2−2⁻²³)×2¹²⁷`（float32）的可表示值。零、负数、Inf、NaN 和非规格化数的行为须按目标确认；不逐 lane 检查数值。
+
+例如输入 `1、e、e²`，结果约为 `0、1、2`；实际结果有浮点舍入误差。
 
 **调用示例**
 
@@ -1203,7 +1249,7 @@ def example(a_ub, b_ub):
         result = tla.simd.vmin(a, b)
 ```
 
-仓库测试：[tla_ut/simd/elementwise.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/elementwise.py#L59)。
+仓库测试：[tla_ut/simd/vmin.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vmin.py#L50)。
 
 <a name="api-tla-simd-vmins"></a>
 
@@ -1308,17 +1354,19 @@ def example(a_ub, b_ub, c_ub):
 
 签名：`tla.simd.vmull(src0, src1, mask=None)`
 
-返回：乘积的低位向量与高位向量。
+返回：`(lo, hi)`，分别保存 64 位乘积的低 32 位和高 32 位；两个向量均与输入同 dtype、同元素个数。
 
 编译表示：ave.hir.mull。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError。返回同型低半部和高半部。uint32 使用限制见下文。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入同 dtype（含符号性）、同 lane 数；不一致抛 ValueError。返回同型低半部和高半部。uint32 使用限制见下文。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype，均为 64 个元素；不一致抛 ValueError。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype，均为 64 个元素；不一致抛 ValueError。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 
 已知限制：950PR 上 uint32 乘积的高半部可能错误，暂不用于设备正例，详见 [SIMD-042](../tracking/simd.md#simd-042)。
+
+逐元素执行 32 位 × 32 位乘法，得到完整的 64 位乘积。int32 按有符号数相乘，uint32 按无符号数相乘；lo、hi 保存对应的 32 位位模式。例如 uint32 的 `0xFFFFFFFF × 2` 应得到 `lo=0xFFFFFFFE`、`hi=0x00000001`。
 
 **调用示例**
 
@@ -1348,7 +1396,7 @@ def example(a_ub, b_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype、同 lane 数。 B64 向量最多包含 64 个元素。 | 必填 |
-| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | tensor 须为秩 0 且与源 dtype（含符号性）一致；dtype 不同抛 TypeError，非秩 0 抛 ValueError。整数源只接受非 bool 的整数常量，越出源 dtype 范围抛 ValueError。单 lane vector 不能作为标量输入。 B64 整数常量可能丢失精度，例如 2**53+1 会变为 2**53；精确值须通过同 dtype 的秩 0 tensor 传入。 | 必填 |
+| `scalar` | 广播给各 lane 的标量操作数 | int / float / 标量 tl.tensor | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | tensor 须为秩 0 且与 src 同 dtype；类型不符抛 TypeError，秩不符抛 ValueError。整数向量只接受整数常量（不含 bool），越界抛 ValueError；不接受 vector。 B64 精确大整数请传同 dtype 的标量 tensor，常量精度限制见 [SIMD-043](../tracking/simd.md#simd-043)。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
 | `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留 `src` 对应位置的值。 | MODE.ZEROING |
 
@@ -1364,7 +1412,7 @@ def example(a_ub):
         result = tla.simd.vmuls(a, 2.0)
 ```
 
-仓库测试：[tla_ut/simd/vcvt.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vcvt.py#L54)。
+仓库测试：[tla_ut/simd/vmuls.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vmuls.py#L32)。
 
 <a name="api-tla-simd-vneg"></a>
 
@@ -1502,7 +1550,11 @@ def example(a_ub):
 | `dst` | 目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B8：不支持<br>B16：不支持<br>B32：uint32<br>B64：不支持 | dst 必须为一维连续、零 offset 的 UB buffer。src、indices 固定 64 lanes。活跃索引不得重复或越界。 | 必填 |
 | `indices` | 索引向量 | tla.vector | 数据类型：<br>B32：uint32<br>lane 数：64 | 按元素计，活跃索引不得重复或越界。 | 必填 |
 | `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：uint32<br>B64：不支持 | dst 必须为一维连续、零 offset 的 UB buffer。src、indices 固定 64 lanes。活跃索引不得重复或越界。 | 必填 |
-| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） | 数据类型：<br>B1：int1<br>lane 数：64 | — | 必填 |
+| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） | 数据类型：<br>B1：int1<br>lane 数：64 | true 时写入对应元素；false 时不写，目标内存保留原值。 | 必填 |
+
+活跃元素执行 `dst[indices[i]] = src[i]`；uint32 的字节地址为 `dst 起点 + 4 × indices[i]`。索引互异，写入不做原子合并。
+
+后续读写相同 UB 区域时须按流水依赖安排同步；本接口本身不执行屏障。
 
 **调用示例**
 
@@ -1530,8 +1582,8 @@ def example(src_ub, indices_ub, dst_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | — | 必填 |
-| `true_val` | 参数 | tla.vector | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 B64 向量最多包含 64 个元素。 | 必填 |
-| `false_val` | 参数 | tla.vector | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 B64 向量最多包含 64 个元素。 | 必填 |
+| `true_val` | mask 为 true 时选取的向量 | tla.vector | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 B64 向量最多包含 64 个元素。 | 必填 |
+| `false_val` | mask 为 false 时选取的向量 | tla.vector | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 参与计算的向量需同 dtype（含符号性）、同 lane 数；不一致抛 ValueError，不隐式转换或广播。 B64 向量最多包含 64 个元素。 | 必填 |
 
 **调用示例**
 
@@ -1744,11 +1796,18 @@ def example(x_ub, y_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `ptr` | 缓冲区或索引得到的地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 普通 NORM/ONEPT 形式使用与写值一致的元素类型。目标范围须容纳分布产生的写入。 | 必填 |
-| `offsets_or_val` | 省略 val 时是待写入值，提供 val 时是显式偏移 | 整数序列 / tla.vector | 偏移按元素计<br>数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 偏移元数匹配地址秩。省略 val 时第二个参数是写值。 | 必填 |
-| `val` | 待存入的向量或谓词 | tla.vector 或 None | 数据类型：<br>B1：int1<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 偏移元数匹配地址秩。省略 val 时第二个参数是写值。 | None |
-| `dist` | 指令的分布模式 | 编译期 tla.simd.STORE_DIST 枚举或 None | None（STORE_DIST.NORM_B32） / STORE_DIST.NORM_B8 / STORE_DIST.NORM_B16 / STORE_DIST.NORM_B32 / STORE_DIST.NORM_B64 / STORE_DIST.ONEPT_B8 / STORE_DIST.ONEPT_B16 / STORE_DIST.ONEPT_B32 / STORE_DIST.ONEPT_B64 | 仅接受上述枚举成员或 None。分布后缀须与指令所需位宽对应。ONEPT 只存一个元素。 | None |
-| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | None 生成全真 mask。 | None |
+| `ptr` | 缓冲区或索引得到的地址 | tla.buffer / buffer_access | 地址空间：UB<br>数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 与待写入向量同 dtype；写入范围不得越界。 | 必填 |
+| `offsets_or_val` | 省略 val 时是待写入值，提供 val 时是显式偏移 | 整数序列 / tla.vector | 偏移按元素计<br>数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 偏移元数匹配地址秩。省略 val 时第二个参数是写值。 | 必填 |
+| `val` | 待写入向量 | tla.vector 或 None | 数据类型：<br>B8：float8e4m3fn / float8e5m2 / int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 使用显式 offsets 时必填；使用 buf[...] 时将写值作为第二个参数。 | None |
+| `dist` | 指令的分布模式 | 编译期 tla.simd.STORE_DIST 枚举或 None | None（STORE_DIST.NORM_B32） / STORE_DIST.NORM_B8 / STORE_DIST.NORM_B16 / STORE_DIST.NORM_B32 / STORE_DIST.NORM_B64 / STORE_DIST.ONEPT_B8 / STORE_DIST.ONEPT_B16 / STORE_DIST.ONEPT_B32 / STORE_DIST.ONEPT_B64 | 位宽后缀须与 val dtype 一致。None 固定为 NORM_B32，不按 dtype 推断。 | None |
+| `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：与相应向量一致 | NORM：true 写入、false 保留目标内存；None 表示全写。ONEPT 仅使用 None。 | None |
+
+| 分布 | 写入内容 | 地址要求 |
+| --- | --- | --- |
+| STORE_DIST.NORM_B8 / NORM_B16 / NORM_B32 / NORM_B64 | 从起点依次写入 val 的元素，由 mask 控制 | 起点按 32 字节对齐，目标须容纳完整向量 |
+| STORE_DIST.ONEPT_B8 / ONEPT_B16 / ONEPT_B32 / ONEPT_B64 | 只写 val[0]，分别写入 1 / 2 / 4 / 8 字节 | 起点按元素大小对齐 |
+
+两种调用形式为 `vsts(buf[i, ...], values)` 与 `vsts(buf, [i, ...], values)`，偏移单位均为元素。谓词按位存储使用 [pst](#api-tla-simd-pst)。
 
 **调用示例**
 
@@ -1842,6 +1901,8 @@ def example(a_ub, b_ub):
 | --- | --- | --- | --- | --- | --- |
 | `n` | 前缀中为真的 lane 数 | 编译期 int | 1 / 2 / 3 / 4 / 8 / 16 / 32 / 64 / 128 | 前 n 个 lane 置 true，结果 lanes 至少要容纳 n。 | 必填 |
 | `lanes` | 谓词 lane 数 | 编译期 int | 正整数，至多 256 | 结果为 int1。有效组合需匹配指定 VL 图样和消费指令。 | 必填 |
+
+`n` 是 true 的个数，`lanes` 是谓词总长度，二者都不是数据位宽。例如 `pge(32, 64)` 返回前 32 个 true、后 32 个 false。全 false 可写成 `pnot(pset(32))`，不使用 `pge(0, 64)`。
 
 **调用示例**
 
@@ -2152,9 +2213,11 @@ def example(mask_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为满 64 lanes 且同 dtype，不一致直接报错；返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
-| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32<br>B64：不支持 | 两个输入均为满 64 lanes 且同 dtype，不一致直接报错；返回模 2³² 的差与借位谓词，inactive 得到 0 和 false。 | 必填 |
+| `src0` | 第一个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype、同元素个数；不一致时报错。每个向量包含 64 个元素。 | 必填 |
+| `src1` | 第二个源操作数 | tla.vector | 数据类型：<br>B32：int32 / uint32 | 两个输入须同 dtype、同元素个数；不一致时报错。每个向量包含 64 个元素。 | 必填 |
 | `mask` | 控制各 lane 是否启用的谓词 | tla.vector（int1 谓词） 或 None | 数据类型：<br>B1：int1<br>lane 数：64 | None 生成全真 mask。 | None |
+
+差按 2³² 取模，借位按无符号比较判断。mask 为 false 的位置返回 0 和 false。
 
 **调用示例**
 
@@ -2196,11 +2259,11 @@ def example(a_ub, b_ub):
 
 ```python
 @tla.jit
-def example(a_ub, b_ub, out_ub):
+def example(a_ub, b_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
         b = tla.simd.vlds(b_ub[0])
-        total, carry_out = tla.simd.vaddcs(a, b, tla.simd.pge(0, 64))
+        total, carry_out = tla.simd.vaddcs(a, b, tla.simd.pnot(tla.simd.pset(32)))
 ```
 
 仓库测试：[tla_ut/simd/carry.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/carry.py#L15)。
@@ -2230,11 +2293,11 @@ def example(a_ub, b_ub, out_ub):
 
 ```python
 @tla.jit
-def example(a_ub, b_ub, out_ub):
+def example(a_ub, b_ub):
     with tla.scope.simd():
         a = tla.simd.vlds(a_ub[0])
         b = tla.simd.vlds(b_ub[0])
-        diff, borrow_out = tla.simd.vsubcs(a, b, tla.simd.pge(0, 64))
+        diff, borrow_out = tla.simd.vsubcs(a, b, tla.simd.pnot(tla.simd.pset(32)))
 ```
 
 仓库测试：[tla_ut/simd/carry.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/carry.py#L38)。
@@ -2369,7 +2432,7 @@ def example(a_ub):
 
 ## tla.simd.vusqz
 
-签名：`tla.simd.vusqz(mask, dtype='u32')`
+签名：`tla.simd.vusqz(mask, dtype=tl.uint32)`
 
 返回：tla.vector，lane 数由 `dtype` 决定。
 
@@ -2378,9 +2441,11 @@ def example(a_ub):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `mask` | 活跃 lane 谓词 | tla.vector（int1 谓词） | 数据类型：<br>B1：int1<br>lane 数：等于结果 lane 数 | 必填。 | 必填 |
-| `dtype` | 结果元素类型 | 编译期 tl.dtype | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 | 决定结果位宽与 lane 数：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。其它 dtype 直接报错。 | 'u32'（uint32） |
+| `dtype` | 结果元素类型 | 编译期 tl.dtype | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 | 决定结果位宽与 lane 数：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。其它 dtype 直接报错。 | tl.uint32 |
 
-排他前缀计数。结果 lane `i` 为索引小于 `i` 的活跃 lane 个数。
+排他前缀计数。结果 lane `i` 为索引小于 `i` 的活跃 lane 个数。8 / 16 / 32 位结果的计数范围分别为 0～255 / 0～127 / 0～63。
+
+有符号结果保留相同位模式：int8 中 128～255 对应 −128～−1。需要非负计数时使用 uint8、uint16 或 uint32。
 
 **调用示例**
 
