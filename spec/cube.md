@@ -10,18 +10,23 @@
 
 签名：`tla.copy_ub_to_l1(src, dst)`
 
-返回：None。编译表示：`hivm.hir.copy`。
+返回：None。将源缓冲区中的元素复制到目标缓冲区，不改变元素值或顺序。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源 | tla.buffer | UB；float16 / bfloat16 | 保持准备好的物理布局，不自动 ND2NZ。 | 必填 |
-| `dst` | 目的 | tla.buffer | L1；与 src 相同 | 形状与布局须匹配。 | 必填 |
+| `src` | 源缓冲区 | tla.buffer | UB；float16 / bfloat16 / float32 | 末维连续；有效起始地址、每行字节数及行间距按 32B 对齐。 | 必填 |
+| `dst` | 目标缓冲区 | tla.buffer | L1；类型与 src 相同 | 形状与 src 相容；有效起始地址、每行字节数及行间距按 32B 对齐。 | 必填 |
 
-支持 4D NZ 物理拷贝及 2D 物理视图子块拷贝；末维连续，源和目的形状相容。源、目的有效起始地址（含 offset）、相邻搬运行的字节间距及每行搬运字节数均须为 32B 的整数倍；FP16/BF16 对应 16 个元素。NZ 子块还须保持完整的物理分块。偏移、行间距及实际搬运范围不得导致越界；不提供非对齐搬运回退。
+**约束**
 
-该接口不执行 ND2NZ，调用方须先准备目标物理布局。多个 AIV 子块写共享 L1 时必须使用互不重叠的目的范围，或只由一个子块写入；AIV 写入后供 AIC 消费必须建立跨核同步。完成同步不消除多个写者之间的重叠写竞争。
+- 地址：有效起始地址包含视图偏移；源、目的访问范围均不得超出各自分配。
+- 长度：每行元素数须为 `32 / sizeof(dtype)` 的整数倍，例如 float16 为 16、float32 为 8；带行间距的二维搬运，每行不超过 65535 个元素，行数不超过 8189。
+- 步长：源、目的行间距须为 `32 / sizeof(dtype)` 的整数倍，且不小于每行元素数；带行间距的二维搬运，行间距不超过 65535 个元素。
+- 容量：含行间距的源、目的访问跨度分别不得超过实际可用 UB、L1 空间；不能仅按有效元素总数判断。
+- 同步：多个 AIV 写共享 L1 时，目的范围不得重叠；AIV 写入后供 AIC 读取前须建立跨核同步。
+- 填充：不提供 `pad_mode`、`pad_value`，不自动补齐非对齐数据。
 
-约束：暂不支持手动设置 `pad_mode` 和 `pad_value`。
+**调用示例**
 
 ```python
 @tla.jit
@@ -38,16 +43,21 @@ def example(src, dst):
 
 签名：`tla.copy_l1_to_ub(src, dst)`
 
-返回：None。编译表示：`hivm.hir.l12ub`。
+返回：None。将 L1 矩阵复制到 UB，目标按逻辑矩阵的行顺序存放。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源 | tla.buffer | L1；float16 / bfloat16 | 4D NZ 物理布局。 | 必填 |
-| `dst` | 目的 | tla.buffer | UB；与 src 相同 | 2D ND；逻辑元素数一致。 | 必填 |
+| `src` | 源缓冲区 | tla.buffer | L1；float16 / bfloat16 | 完整矩阵分块；分块形状为 `(16, C)`，其中 `C = 32 / sizeof(dtype)`；块内连续。 | 必填 |
+| `dst` | 目标缓冲区 | tla.buffer | UB；与 src 类型相同 | 逻辑矩阵形状与 src 一致；末维连续，有效起始地址及行间距按 32B 对齐。 | 必填 |
 
-允许末维连续且满足对齐的行间距和偏移子视图。目的 UB 的有效起始地址（含 offset）及行间距须为 32B 的整数倍；FP16/BF16 对应 16 个元素。L1 源子块须保持完整 NZ 分块，源和目的范围均不得越界。不提供非对齐搬运回退。
+**约束**
 
-当前路径写入 sub-block 0 的 UB，由 AIC 发出 MTE1→AIV 的跨核同步后，由对应子块读取。不提供其他 dtype、5D 批量或非连续末维。
+- 地址：允许满足对齐的偏移和行间距；源、目的均不得越界。
+- 长度：按完整分块搬运；源、目的有效元素数一致，不提供尾块填充。
+- 容量：访问跨度（含偏移及行间距）不得超过各自实际分配和可用 L1、UB 空间。
+- 同步：目标为 AIV sub-block 0 的 UB；AIC 发出跨核同步后，由该子块读取。
+
+**调用示例**
 
 ```python
 @tla.jit
@@ -62,9 +72,12 @@ def example(src, dst):
 
 ## tla.copy_l1_to_bt
 
-**本轮不需要，暂不开放。** 保留入口供问题追溯：`tla.copy_l1_to_bt(src, dst, params=None)`，IR 为 `hivm.hir.l12bt`。
+**暂不开放。**
 
-当前不提供可用参数组合。原生操作要求常量 n∈[1,1024]，源和目的容量不少于 roundUp(n,16)，L1 地址按 32B、BT 地址按 64B 对齐，末维 stride=1；生产和消费之间须建立 MTE1→M 依赖。
+签名：`tla.copy_l1_to_bt(src, dst, params=None)`
+
+- 当前不提供可用的参数组合。
+- 本接口不列入待转测范围。
 
 仓库 IR 构造用例：[tla_ut/dma/copy.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/copy.py#L45)。
 
@@ -72,16 +85,12 @@ def example(src, dst):
 
 ## tla.copy_l1_to_fb
 
-**本轮不需要。** 入口直接抛出 NotImplementedError。保留规格供追溯。
+**暂不开放。**
 
 签名：`tla.copy_l1_to_fb(src, dst)`
 
-**预留入口。** 当前调用会抛出 NotImplementedError。
-
-| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
-| --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：L1<br>数据类型：无可执行签名 | 当前入口抛 NotImplementedError，不生成 DMA op。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：FB<br>数据类型：无可执行签名 | 当前入口抛 NotImplementedError，不生成 DMA op。 | 必填 |
+- 当前调用抛出 `NotImplementedError`。
+- 本接口不列入待转测范围。
 
 <a name="api-tla-copy-l0c-to-ub"></a>
 
@@ -89,44 +98,38 @@ def example(src, dst):
 
 签名：`tla.copy_l0c_to_ub(src, dst, params=None)`
 
-返回：None。
+返回：None。将 L0C 累加结果写入目标缓冲区，可按参数选择数据重排、类型转换及激活。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 累加结果 | tla.buffer | L0C；float32 | 4D NZ；NZ2NZ 还须满足下方来源连续性约束；不得读取未初始化累加器。 | 必填 |
-| `dst` | 目的 | tla.buffer | UB；float32 / float16 / bfloat16 | 仅限连续物理布局、offset=0 的直接分配或等价 reshape；还须符合本接口的组合限制。 | 必填 |
-| `params` | 搬运配置 | tla.FixpipeL0C2UBParams / None | 本接口列出的配置组合 | None 使用下列字段的默认值。 | None |
-| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND / NZ2NZ / NZ2DN | 与 dst 的 rank、shape 配套。 | NZ2NZ |
-| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT / F322F16 / F322BF16 | 分别对应 FP32 / FP16 / BF16；还须满足下方组合限制。 | NO_QUANT |
-| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU / NORMAL_RELU | 可与本接口列出的布局、类型转换组合。 | NO_RELU |
-| `params.dual_dst_mode` | AIV 目的切分 | tla.FixpipeDualDstMode | NO_DUAL / ROW_SPLIT / COLUMN_SPLIT | 双目标仅支持 NZ2ND。 | NO_DUAL |
-| `params.sub_block_idx` | 单目标子块 | tla.FixpipeSubBlock / None | SUB_BLOCK_0 / SUB_BLOCK_1 / None | 双目标必须显式设为 None，不能保留默认值。 | SUB_BLOCK_0 |
+| `src` | 累加结果 | tla.buffer | L0C；float32 | 四维分块，已初始化；NZ2NZ 时必须连续：以 B=16 为累加块宽，stride=(shape[1]*B*B,B*B,B,1)，不允许额外块间距。 | 必填 |
+| `dst` | 目的 | tla.buffer | UB；float32 / float16 / bfloat16 | 仅直接分配或连续、零偏移的 reshape；不支持 subview、动态偏移或额外行间距；满足对齐也不放宽此限制。 | 必填 |
+| `params` | 搬运配置 | tla.FixpipeL0C2UBParams / None | 下列配置字段 | None 使用下列字段的默认值。 | None |
+| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
+| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT：不转换；F322F16：float32 转 float16；F322BF16：float32 转 bfloat16 | 源为 float32；目的类型与转换模式对应，组合限制见下表。 | NO_QUANT |
+| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU：不激活；NORMAL_RELU：负值置零 | 与所选目的模式及类型转换的组合见下表。 | NO_RELU |
+| `params.dual_dst_mode` | AIV 目的切分 | tla.FixpipeDualDstMode | NO_DUAL：完整写入单个 UB；ROW_SPLIT：两个 UB 各接收一半行；COLUMN_SPLIT：各接收一半列 | ROW_SPLIT 要求 M 可均分；COLUMN_SPLIT 要求 N 为 32 的倍数；与 dma_mode、sub_block_idx 的互斥见组合表。 | NO_DUAL |
+| `params.sub_block_idx` | 单目标子块 | tla.FixpipeSubBlock / None | SUB_BLOCK_0：第一个 AIV 子块；SUB_BLOCK_1：第二个 AIV 子块；None：不单独选择 | 双目标必须显式设为 None，不能保留默认值。 | SUB_BLOCK_0 |
 
-**组合限制（Ascend950）**
+**约束**
 
-`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
+- 长度：常规子集的 M、N 均为 16 的正整数倍且不超过 65520。
+
+**组合限制（Ascend950，常规浮点子集）**
+
+- 以下常规子集中，`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
 
 | dma_mode | pre_quant | dual_dst_mode | sub_block_idx | 每个目的 UB 的形状 |
 | --- | --- | --- | --- | --- |
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | NO_DUAL | SUB_BLOCK_0 或 SUB_BLOCK_1 | 2D (M,N) |
-| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | NO_DUAL | SUB_BLOCK_0 或 SUB_BLOCK_1 | 与源相容的 4D NZ |
+| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | NO_DUAL | SUB_BLOCK_0 或 SUB_BLOCK_1 | 与源相容的四维分块 |
 | NZ2DN | NO_QUANT / F322F16 / F322BF16 | NO_DUAL | SUB_BLOCK_0 或 SUB_BLOCK_1 | 2D (N,M) |
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | ROW_SPLIT | 必须显式 None | 2D (M/2,N) |
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | COLUMN_SPLIT | 必须显式 None | 2D (M,N/2) |
 
-逻辑 M、N 为 16 的正整数倍，源和目的均不得超过各自存储空间容量。ROW_SPLIT 要求 M 可均分；COLUMN_SPLIT 要求 N 为 32 的倍数。双目标不支持 NZ2NZ/NZ2DN，也不能同时指定单目标子块。
+- 容量：源、目的访问范围不得超出实际分配及各自可用容量。
 
-当 `dma_mode=NZ2NZ` 时，来源必须为连续的 4D NZ 物理布局，内层为 `(16,16)`，以元素为单位的 stride 必须为 `(shape[1] × 256, 256, 16, 1)`。暂不支持保留父 buffer 额外间距的来源子视图；不能仅修改 shape 或 stride 描述来替代实际数据重排。此项来源连续性限制仅适用于 NZ2NZ。
-
-目的 UB 仅提供上述形状对应的连续物理布局，使用直接 `tla.alloc` 或保持连续、零偏移的 `tla.reshape` 结果。暂不支持目的 `subview`、非零或动态 offset、带额外行间距的目的视图；满足 32B 对齐也不自动获得这些视图的支持。
-
-AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。单目标仅由指定子块消费；双目标分别消费对应行分块或列分块。
-
-内部保留 `quant_scale=None`、`unit_flag_ctrl=None`、`unit_flag_group_id=None` 的默认行为；None 表示属性缺省，不等同于 DISABLED。这些字段不作为本轮可配置参数。
-
-约束：暂不支持 `QF322F32_PRE`、手动设置 `quant_scale`、`LEAKY_RELU/P_RELU`、整数/FP8、5D 批量及手动 UnitFlag。
-
-约束：双目标仅支持 NZ2ND，不支持其他目的布局。
+- AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。单目标仅由指定子块消费；双目标分别消费对应行分块或列分块。
 
 仓库测试：[tla_ut/cube/gemm_bias.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/cube/gemm_bias.py#L35)。
 
@@ -136,40 +139,43 @@ AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。�
 
 签名：`tla.copy_l0c_to_l1(src, dst, params=None)`
 
-返回：None。
+返回：None。将 L0C 累加结果写入目标缓冲区，可按参数选择数据重排、类型转换及激活。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 累加结果 | tla.buffer | L0C；float32 | 4D NZ；不得读取未初始化累加器。 | 必填 |
+| `src` | 累加结果 | tla.buffer | L0C；float32 | 四维矩阵分块；不得读取未初始化累加器。 | 必填 |
 | `dst` | 目的 | tla.buffer | L1；float32 / float16 / bfloat16 | 形状、布局与类型须符合本接口的组合限制。 | 必填 |
-| `params` | 搬运配置 | tla.FixpipeL0C2L1Params / None | 本接口列出的配置组合 | None 使用下列字段的默认值。 | None |
-| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND / NZ2NZ / NZ2DN | 与 dst 的 rank、shape 配套。 | NZ2NZ |
-| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT / F322F16 / F322BF16 | 分别对应 FP32 / FP16 / BF16；还须满足下方组合限制。 | NO_QUANT |
-| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU / NORMAL_RELU | 可与本接口列出的布局、类型转换组合。 | NO_RELU |
+| `params` | 搬运配置 | tla.FixpipeL0C2L1Params / None | 下列配置字段 | None 使用下列字段的默认值。 | None |
+| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
+| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT：不转换；F322F16：float32 转 float16；F322BF16：float32 转 bfloat16 | 源为 float32；目的类型与转换模式对应，组合限制见下表。 | NO_QUANT |
+| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU：不激活；NORMAL_RELU：负值置零 | 与所选目的模式及类型转换的组合见下表。 | NO_RELU |
 
-**组合限制（Ascend950）**
+**约束**
 
-`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
+- 长度：常规子集的 M、N 均为 16 的正整数倍且不超过 65520。
+
+**组合限制（Ascend950，常规浮点子集）**
+
+- 以下常规子集中，`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
 
 | dma_mode | pre_quant | 目的类型 | 目的形状 |
 | --- | --- | --- | --- |
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 2D (M,N) |
-| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 与源相容的 4D NZ |
+| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 与源相容的四维分块 |
 | NZ2DN | F322F16 / F322BF16 | 仅 FP16 / BF16 | 2D (N,M) |
+| NZ2DN | NO_QUANT | FP32 | 不支持 |
 
-**NZ2DN + NO_QUANT→FP32 不开放。** 本接口不提供 `dual_dst_mode` 或 `sub_block_idx`。
+- 本接口不提供 `dual_dst_mode` 或 `sub_block_idx`；不支持的类型组合见表。
 
-逻辑 M、N 为 16 的正整数倍，源和目的均不得超过各自存储空间容量。ND/DN 输出不能未经布局转换直接作为 NZ 输入。调用方须保证写入完成后再由后续运算读取，并保证缓冲区复用的依赖关系。
+- 容量：源、目的访问范围不得超过实际分配及各自可用容量。
+- 数据顺序：行顺序或转置输出若供分块输入使用，须先重排；修改视图不改变数据顺序。
+- 同步：写入完成后才能读取，复用前须保证先前消费者完成。
 
-内部保留 `quant_scale=None`、`unit_flag_ctrl=None`、`unit_flag_group_id=None` 的默认行为；None 表示属性缺省，不等同于 DISABLED。这些字段不作为本轮可配置参数。
+**L1 输出与后续输入的组合限制**
 
-另外固定 `channel_split=False`、`c0_pad_en=True`，不提供配置变体。
-
-约束：`NZ2NZ + NO_QUANT→FP32` 在上述固定配置下输出 C0=16 的 NZ 物理布局，对逻辑 `(M,N)` 使用 `(N/16, M/16, 16, 16)` 描述。该输出不能直接作为要求 C0=8 布局的 FP32 Cube 输入；须先完成实际布局转换。`reshape` 或修改视图元数据不会重排数据，也不能解除此限制。
-
-约束：暂不支持 `QF322F32_PRE`、手动设置 `quant_scale`、`LEAKY_RELU/P_RELU`、整数/FP8、5D 批量及手动 UnitFlag。
-
-约束：暂不支持手动设置 `channel_split` 和 `c0_pad_en`。
+| dma_mode | pre_quant / 目的类型 | 配置 | 输出及后续使用约束 |
+| --- | --- | --- | --- |
+| NZ2NZ | NO_QUANT / float32 | 默认 | 输出块宽 C_out=16；形状为 (N/C_out,M/16,16,C_out)。后续矩阵输入要求 C_in=32/sizeof(dtype)，此时为 8；必须先重排数据，reshape 不能代替转换。 |
 
 仓库测试：[tla_ut/dma/fixpipe.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/fixpipe.py#L69)。
 
@@ -179,32 +185,34 @@ AIC 完成写入后必须建立跨核依赖，再由对应 AIV 子块读取。�
 
 签名：`tla.store_l0c_to_gm(src, dst, params=None)`
 
-返回：None。
+返回：None。将 L0C 累加结果写入目标缓冲区，可按参数选择数据重排、类型转换及激活。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 累加结果 | tla.buffer | L0C；float32 | 4D NZ；不得读取未初始化累加器。 | 必填 |
+| `src` | 累加结果 | tla.buffer | L0C；float32 | 四维矩阵分块；不得读取未初始化累加器。 | 必填 |
 | `dst` | 目的 | tla.buffer | GM；float32 / float16 / bfloat16 | 形状、布局与类型须符合本接口的组合限制。 | 必填 |
-| `params` | 搬运配置 | tla.FixpipeL0C2GMParams / None | 本接口列出的配置组合 | None 使用下列字段的默认值。 | None |
-| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND / NZ2NZ / NZ2DN | 与 dst 的 rank、shape 配套。 | NZ2NZ |
-| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT / F322F16 / F322BF16 | 分别对应 FP32 / FP16 / BF16；还须满足下方组合限制。 | NO_QUANT |
-| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU / NORMAL_RELU | 可与本接口列出的布局、类型转换组合。 | NO_RELU |
+| `params` | 搬运配置 | tla.FixpipeL0C2GMParams / None | 下列配置字段 | None 使用下列字段的默认值。 | None |
+| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
+| `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT：不转换；F322F16：float32 转 float16；F322BF16：float32 转 bfloat16 | 源为 float32；目的类型与转换模式对应，组合限制见下表。 | NO_QUANT |
+| `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU：不激活；NORMAL_RELU：负值置零 | 与所选目的模式及类型转换的组合见下表。 | NO_RELU |
 
-**组合限制（Ascend950）**
+**约束**
 
-`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
+- 长度：常规子集的 M、N 均为 16 的正整数倍且不超过 65520。
+
+**组合限制（Ascend950，常规浮点子集）**
+
+- 以下常规子集中，`pre_quant` 与目的元素类型必须一一对应：`NO_QUANT→FP32`、`F322F16→FP16`、`F322BF16→BF16`。以下组合均允许 `pre_relu=NO_RELU` 或 `NORMAL_RELU`。
 
 | dma_mode | pre_quant | 目的类型 | 目的形状 |
 | --- | --- | --- | --- |
 | NZ2ND | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 2D (M,N) |
-| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 与源相容的 4D NZ |
+| NZ2NZ | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 与源相容的四维分块 |
 | NZ2DN | NO_QUANT / F322F16 / F322BF16 | FP32 / FP16 / BF16，按转换模式对应 | 2D (N,M) |
 
-本接口不提供 `dual_dst_mode` 或 `sub_block_idx`。逻辑 M、N 为 16 的正整数倍，源和目的均不得超过各自存储空间容量。目的描述符的布局、形状及元素类型必须与所选转换一致；调用方须保证源累加器在搬运完成前不被改写，且后续消费者在写入完成后读取。
-
-内部保留 `quant_scale=None`、`unit_flag_ctrl=None`、`unit_flag_group_id=None` 的默认行为；None 表示属性缺省，不等同于 DISABLED。这些字段不作为本轮可配置参数。
-
-约束：暂不支持 `QF322F32_PRE`、手动设置 `quant_scale`、`LEAKY_RELU/P_RELU`、整数/FP8、5D 批量及手动 UnitFlag。
+- 容量：源、目的访问范围不得超出实际分配及各自可用容量。
+- 同步：搬运完成前不得改写源累加器，写入完成后才能读取目的。
+- 目标选择：本接口不提供 `dual_dst_mode` 或 `sub_block_idx`。
 
 仓库测试：[tla_ut/cube/allocation.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/cube/allocation.py#L47)。
 
@@ -271,7 +279,7 @@ def example(a_l1, b_l1, acc_l0c):
 
 ## tla.cube.mmad
 
-签名：`tla.cube.mmad(a, b, acc, transpose_a=False, transpose_b=False, clear_accum=False, unit_flag_ctrl=None, *, unit_flag_group_id=None, real_m=None, real_k=None, real_n=None)`
+签名：`tla.cube.mmad(a, b, acc, transpose_a=False, transpose_b=False, clear_accum=False, *, real_m=None, real_k=None, real_n=None)`
 
 返回：None。
 
@@ -285,8 +293,6 @@ def example(a_l1, b_l1, acc_l0c):
 | `transpose_a` | 是否在乘法的逻辑索引中转置 A | 编译期 bool | False / True | 转置后须满足逻辑形状。 | False |
 | `transpose_b` | 是否在乘法的逻辑索引中转置 B | 编译期 bool | False / True | 转置后须满足逻辑形状。 | False |
 | `clear_accum` | 是否从零开始计算 | 编译期 bool | False / True | 为 True 时从零开始，False 累加到已有值。 | False |
-| `unit_flag_ctrl` | 选择累加器 UnitFlag 的控制方式 | 编译期 tla.UnitFlagMode / int / None | None / 0（DISABLED）/ 2（ENABLED_WITHOUT_UPDATE）/ 3（ENABLED_WITH_UPDATE） | 1 保留。None 省略属性。手动模式可用 unit_flag=False 关闭自动推断。 | None |
-| `unit_flag_group_id` | 指定配对操作的 UnitFlag 组号 | 编译期 int 或 None | None 或 −2⁶³ 至 2⁶³−1（IR 编码） | 与生产者及消费者协议一致。编码域不代表芯片可用 ID 集。 | None |
 | `real_m` | 实际计算的 M 维长度 | 编译期 int 或 None | None 或 16 的正整数倍，不超过对应 tile 维度 | None 使用全长。 | None |
 | `real_k` | 实际使用的 K 维长度 | 编译期 int 或 None | None 或 16 的正整数倍，不超过对应 tile 维度 | None 使用全长。 | None |
 | `real_n` | 实际计算的 N 维长度 | 编译期 int 或 None | None 或 16 的正整数倍，不超过对应 tile 维度 | None 使用全长。 | None |

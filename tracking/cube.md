@@ -14,6 +14,10 @@
 
 依据：AscendNPU-IR `c521aba2` 的 `bishengir/lib/Template/include/RegBase/DMAUtils.h` 中 `copy_ubuf_to_cbuf_intrin_core` 按 32B 块计算行间距，未提供非对齐地址回退。非对齐行距可能产生错误数据；规格外输入尚未统一在前端拒绝。
 
+补充结论：FP32→FP32 纳入待转测范围，保留 32B 对齐要求（FP32 为 8 个元素），支持规格中的 2D 物理视图与 4D NZ 物理拷贝，不执行 ND2NZ 或类型转换。
+
+补充依据：AscendNPU-IR `0e7d8bb2d0d6a39b83996e909eee1b973685e164` 的 `HIVMDMAOps.td::CopyOp` 接受 F32 且要求源、目的同类型；RegBase `Vector/Copy1D.cpp`、`Copy2D.cpp`、`Copy3D.cpp` 均注册 UB→L1 的 float 模板。TLA 的 `copy_ub_to_l1` 直接生成该 copy 路径。核对范围为 IR 类型约束与目标 lowering；本次规格更新未新增设备精度验证。
+
 <a name="cube-002"></a>
 
 ## CUBE-002 · tla.copy_l1_to_ub
@@ -68,7 +72,7 @@
 
 - 需按目的布局限定类型转换和激活组合。
 
-结论：本轮范围已确定，按规格进入待转测。NZ2ND/NZ2NZ 支持 FP32/FP16/BF16；NZ2DN 仅保留 FP16/BF16，FP32 路径暂不具备目标实现。激活仅提供无激活/ReLU；不提供双目标或子块选择，channel_split/C0 padding 保持内部默认值。
+结论：本轮范围已确定，按规格进入待转测。NZ2ND/NZ2NZ 支持 FP32/FP16/BF16；NZ2DN 仅保留 FP16/BF16，FP32 路径暂不具备目标实现。激活仅提供无激活/ReLU；不提供双目标或子块选择。
 
 补充结论：FP32 NZ2NZ 在固定 `channel_split=False` 下保留 C0=16 布局，不能未经实际布局转换直接接收为 C0=8 的 FP32 Cube 输入；该限制已写入规格。两项直接串接失败不能单独证明搬运损坏，不能通过修改 shape 元数据宣称转换完成。前端和消费端应按各自布局合同检查，串接链路须有明确转换。
 
@@ -82,4 +86,15 @@
 
 - 需明确目的布局、类型转换与激活组合。
 
-结论：本轮范围已确定，按规格进入待转测。NZ2ND/NZ2NZ/NZ2DN 支持 FP32/FP16/BF16 输出及无激活/ReLU；不提供双目标或子块选择。暂不支持手动设置 scale、额外激活模式及手动 UnitFlag。
+结论：本轮范围已确定，按规格进入待转测。NZ2ND/NZ2NZ/NZ2DN 支持 FP32/FP16/BF16 输出及无激活/ReLU；不提供双目标或子块选择。不提供额外 scale、激活模式或手动同步控制字段。
+
+## 搬运长度边界与文档整理
+
+- 查阅版本：AscendNPU-IR `0e7d8bb2` 及当前工作树的 L1→L0 增量实现。本轮仅核对源码和文档，未重新运行边界设备测试。
+- UB→L1：`Template/include/RegBase/DMAUtils.h::copy_ubuf_to_cbuf_intrin_core` 的 burst_len、src_stride、dst_stride 为 uint16；步长以元素传入，随后按 32B 换算。规格对带行间距路径约束每行长度、步长不超过 65535 个元素，且按 32B 对齐。不能将其他 GM DMA 的 21-bit 字节长度上限套用到此接口。
+- UB→L1：当前非连续二维路径只处理一个 4095 行主段及尾段；没有完整遍历多个主段。规格暂将该路径的行数限制为不超过 8189，避免 8190 及以上时遗漏中间行。容量约束仍须独立满足；后端补齐循环后可重新评审。
+- GM→L1：`RegBase/Cube/compat/DMA/Cbuf/nd2nz.cpp` 将矩阵维度转换为 uint16；规格按 65535 上界与类型分块对齐的交集约束，不能把截断后数值当作合法输入。
+- L0C→UB/L1/GM：`RegBase/Cube/compat/Fixpipe/Fixpipe.cpp` 的常规四维路径使用 uint16 矩阵维度；NZ2NZ 的 dst_stride 还计算目的行数乘块宽。规格同时限制维度及该乘积，不能仅检查单个维度。
+- L1→UB：`RegBase/Cube/l12ub.cpp` 按完整块逐段搬运，不据单次原生指令长度宣称整个接口具有相同总长度上限。L1→L0 的 `RegBase/Cube/l12l0.cpp::checkedAddress` 检查地址、步长及容量；规格保留 512B 对齐与目标 64KiB 上限。
+- 上述数值是当前实现不得越过的边界，不是整张矩阵能装入片上存储的保证；所有接口仍须满足实际分配和可用容量。更大形状或非默认模式不能据此自动纳入支持范围。
+- 规格页按语言接口描述，源码路径和实现依据仅记于跟踪页；保留原有仓库测试链接。

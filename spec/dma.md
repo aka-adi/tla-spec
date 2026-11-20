@@ -10,18 +10,25 @@
 
 签名：`tla.load_gm_to_l1(src, dst, params=None)`
 
-返回：None。编译表示：`hivm.hir.nd2nz`。
+返回：None。将 GM 中的矩阵装载到 L1，供后续矩阵运算使用。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源 | tla.buffer | GM；float16 / bfloat16 | 2D ND，末维连续；行间距、偏移和范围须匹配底层分配。 | 必填 |
-| `dst` | 目的 | tla.buffer | L1；与 src 相同 | 4D NZ，与源逻辑矩阵一致。 | 必填 |
-| `params` | 搬运配置 | tla.LoadGM2L1Params / None | 下述配置 | None 等价于默认配置。 | None |
-| `params.enable_nd2nz` | 启用 ND→NZ 转换 | 编译期 bool | True | False 暂不支持并抛出 NotImplementedError；非 bool 抛出 TypeError。 | True |
+| `src` | 源矩阵 | tla.buffer | GM；float16 / bfloat16 / float32 | 二维矩阵，末维连续；行间距不小于列数，访问范围不得越界。 | 必填 |
+| `dst` | 目标矩阵 | tla.buffer | L1；与 src 类型相同 | 连续分块存放；以 `C = 32 / sizeof(dtype)` 计，逻辑 `(M,N)` 对应形状 `(N/C,M/16,16,C)`。 | 必填 |
+| `params` | 搬运配置 | tla.LoadGM2L1Params / None | 下列字段 | None 使用默认配置。 | None |
+| `params.enable_nd2nz` | 启用矩阵装载所需的数据重排 | 编译期 bool | True | 不提供关闭转换的路径；False 抛出 NotImplementedError，非 bool 抛出 TypeError。 | True |
 
-逻辑 M、N 为 16 的正整数倍，源和目的须满足 NZ 分块对齐且不越界；当前范围不包括尾块、3D→5D 批量和其他 dtype。
+**约束**
 
-约束：暂不支持手动设置 `l2_cache_ctrl` 和 `enable_dn2nz`。
+- 长度：M 为 16 的正整数倍，N 为 C 的正整数倍；M、N 均不超过 65535 个元素。因此 M 最大为 65520；N 最大为 `floor(65535/C) × C`。
+- 分块：基本块为 `(16,C)`；例如 float16 的 C=16，float32 的 C=8。类型不同时不能直接沿用相同的分块形状。
+- 容量：目标总字节数 `M × N × sizeof(dtype)` 不得超过实际分配及可用 L1 空间；维度上限不代表最大矩阵可整体放入 L1。
+- 地址：源偏移、行间距与目标分块须描述同一逻辑矩阵，访问不得越界。
+- 转换：不改变元素类型，不提供反向转换、其他重排格式或非对齐尾块填充。
+- 同步：装载完成后才能由矩阵运算读取；复用 L1 缓冲区前须保证先前消费者完成。
+
+**调用示例**
 
 ```python
 @tla.jit
@@ -121,30 +128,30 @@ def example(x, y):
 
 签名：`tla.copy_l1_to_l0(src, dst, params=None)`
 
-返回：None。
+返回：None。将 L1 中的矩阵分块复制到矩阵乘法输入缓冲区。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | L1；float16 / bfloat16 | 源视图描述所需矩阵分块，物理布局须与转置模式匹配。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | L0A / L0B；与 src 相同 | 目标视图决定每块搬运范围；L0A 为 zN，L0B 为 nZ，地址及 offset 按 512B/fractal 对齐。 | 必填 |
-| `params` | 搬运配置 | tla.CopyL1ToL0Params 或 None | 仅包含 is_transpose | None 等价于使用默认配置。 | None |
-| `params.is_transpose` | 搬运时是否转置 | 编译期 bool | False / True | A、B 各自独立设置；转置选择须与源、目的布局匹配。 | False |
+| `src` | 源缓冲区 | tla.buffer | L1；float16 / bfloat16 | 有效地址及 offset 按 512B 对齐；完整连续分块，见下方通用约束。 | 必填 |
+| `dst` | 目标缓冲区 | tla.buffer | L0A / L0B；与 src 类型相同 | 有效地址及 offset 按 512B 对齐；单次写入及访问跨度不得超过目标实际分配，L0A、L0B 各 64KiB。 | 必填 |
+| `params` | 搬运配置 | tla.CopyL1ToL0Params / None | 下列字段 | None 使用默认配置。 | None |
+| `params.is_transpose` | 是否转置源矩阵 | 编译期 bool | False / True | False 保持矩阵索引，True 交换行列；源视图须匹配选定模式，转置后的范围须与目的相容。 | False |
 
-搬运范围、步长及起始位置由源、目的 buffer 视图的形状、布局、stride 和 offset 描述；分块由调用方准备相应视图，无需额外传递分区字段或矩阵维度。
+**约束**
 
-约束：每次调用仅处理单 batch，不提供批量搬运配置。源、目的使用相容的 4D 物理布局，FP16/BF16 的内层为 (16,16)；地址范围不得越界，且不得超过 L0A/L0B 各 64KiB 的容量。调用方负责 MTE2→MTE1→M 的依赖及缓冲区复用生命周期。
+- 分块：令 `C = 32 / sizeof(dtype)`，基本块为 `(16,C)`，每块 512B；对当前 float16/bfloat16，C=16。
+- 步长：四维分块视图的 `strides[1:] = (16*C,C,1)`；`stride[0]` 为 `16*C` 的倍数且不小于 `shape[1]*16*C`。仅最外层允许额外间距。
+- 长度：单次有效数据不超过 64KiB，即当前两种类型最多 32768 个元素；存在偏移、行间距或共享分配时，可用长度相应减小。
+- 地址：源、目的完整访问跨度均不得越界，不提供非完整分块的自动填充。
+- 同步：调用方须保证装载、搬运、矩阵运算以及缓冲区复用之间的依赖。
 
-约束：stride 以元素为单位。源、目的均须满足 `strides[1:] = (256, 16, 1)`；`stride[0]` 为 256 的倍数，且不小于 `shape[1] × 256`。仅最外层允许额外间距，内层 fractal 必须连续；转置模式不放宽这些物理布局要求。
-
-约束：暂不支持其他数据类型、布局及自动补齐尾块。
-
-仓库 IR 构造用例：[tla_ut/dma/copy.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/copy.py#L42)。
+仓库测试：[tla_ut/dma/copy.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/copy.py#L42)。
 
 <a name="api-tla-make-partition-view"></a>
 
 ## tla.make_partition_view
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -154,7 +161,7 @@ def example(x, y):
 
 ## tla.make_strided_view
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -164,7 +171,7 @@ def example(x, y):
 
 ## tla.make_gather_scatter_view
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -174,7 +181,7 @@ def example(x, y):
 
 ## tla.load_view
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -184,7 +191,7 @@ def example(x, y):
 
 ## tla.store_view
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -194,7 +201,7 @@ def example(x, y):
 
 ## tla.set_pad_value
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
@@ -204,7 +211,7 @@ def example(x, y):
 
 ## tla.set_post_copy
 
-**本轮不需要。** 缺少同名可执行入口和完整 lowering。保留规格供追溯。
+**暂不开放。** 以下为原始提案，不作为可调用接口。
 
 **提案。** 当前源码未找到对应入口；签名和目标约束待评审。
 
