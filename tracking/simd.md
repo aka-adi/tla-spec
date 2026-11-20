@@ -14,6 +14,24 @@
 
 本次仅作源码与文档核对，未重新编译或运行真卡。引用用例不等于本次执行通过；既有联调记录限于 Ascend950 / Process，不能外推至其他目标、后端或最新主线合并版本。
 
+<a name="simd-enum-parameters"></a>
+
+## SIMD 枚举参数
+
+规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
+
+实现基线 `0227cde` / `d54604c` 中，PAT / ROUND / PART / POS 仍是字符串常量集合，新增枚举尚未提供。待前端补枚举定义、成员校验及字符串拒绝用例；本次仅更新规格，未修改代码或执行设备验证。
+
+<a name="simd-mode-contract"></a>
+
+## SIMD mode 语义
+
+规格统一为 ZEROING 填 0、MERGING 保留原值。逐元素算子保留第一个数据向量，累加算子保留 acc；转换、加载、标量广播及归约通过新增的可选 merge 参数提供保留值。merge 须与结果同型，MERGING 时必填，ZEROING 时为 None。
+
+mask 决定参与计算的输入；归约的结果位置始终写入，mode 控制其余位置。vcpadd 的结果写入前半部分，vsqz 的结果写入压缩后的前缀，MERGING 只保留各自尾部，不能按原输入 mask 覆盖有效结果。
+
+实现待跟进：通用 builder 的 MERGING 补零行为需改为保留输入；11 个接口需增加 merge；归约需补齐尾部处理，vcpadd / vsqz 需调整合并位置。此处是规格设计，不能视为代码或设备已支持。核对基线：TLA 0227cde、d54604c，以及 vcpadd / vsqz 所在的 aa927de；本次未运行编译或设备测试。
+
 <a name="simd-011"></a>
 
 ## SIMD-011 · tla.simd.vadds
