@@ -38,41 +38,42 @@ def example(src, dst):
 
 签名：`tla.load_gm_to_ub(src, dst, params=None)`
 
-返回：None。更新已有的 UB 目标 Buffer，不返回新 Buffer；返回不代表 DMA 已完成。
+返回：None。
 
 编译表示：hivm.hir.load。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 dst 相同 | 源视图须合法，与 dst 的 rank、逻辑 shape 相同；不做类型转换。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 src 相同 | 须预先分配；容量、别名和同步覆盖实际物理写入范围。 | 必填 |
-| `params` | L2 缓存配置 | tla.LoadGM2UBParams 或 None | None / tla.LoadGM2UBParams 实例 | 不可变配置；非空对象须为该配置类型。None 等价于默认配置。 | None |
-| `params.l2_cache_ctrl` | GM→UB 的 L2 缓存策略 | 编译期 tla.L2CachePolicy 或 None | None / NORMAL_FV / NORMAL_LV | 唯一配置字段。省略或 None 时由 TLA 显式选择 NORMAL_FV；不接受原始整数或字符串。 | None |
+| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 dst 相同（不含 `float64`） | 源地址需要按照对应数据类型所占字节数对齐，与 dst 的 rank、逻辑 shape 相同。 | 必填 |
+| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 src 相同 | 目的地址需要32字节对齐。 | 必填 |
+| `params` | L2 缓存配置 | tla.LoadGM2UBParams 或 None | None / tla.LoadGM2UBParams 实例 | None 等价于默认配置。 | None |
+| `params.l2_cache_ctrl` | GM→UB 的 L2 缓存策略 | tla.L2CachePolicy | `NORMAL_FV` 表示普通模式优先淘汰<br>`NORMAL_LV` 表示普通模式、优先保留 | 无 | `None`（使用 `NORMAL_FV`） |
 
-`NORMAL_FV` 表示普通模式、优先淘汰，`NORMAL_LV` 表示普通模式、优先保留。通过 `LoadGM2UBParams` 配置，不作为 load 的独立关键字参数。公开字段名、枚举类型、已有成员名与含义保持稳定，后续能力通过新增枚举成员扩展；不保留旧字段 `eviction_policy`、旧公开枚举或 `EvictNormal` 兼容别名。
+本接口在`tla.scope.vector()`内、SIMD/SIMT VF 外区域调用。
 
-约束：两个参数须为 Buffer 视图，不接受裸指针或 Buffer 元素访存位置。搬运范围由 shape/stride/offset 表达，shape 为编译期常量；不提供 Tensor mask、动态 size 或尾块 API。需要条件加载时使用显式控制流。
+硬件可能在 UB 中写入补齐字节。
 
-约束：不提供 `pad_mode/pad_value/left_padding_num/right_padding_num` 配置。无效区域须独立初始化并建立同步；NPUIR 通用 LoadOp 的能力不等同于本接口的公开能力。
+<a name="gm-ub-capacity"></a>
 
-本接口在外围 `tla.scope.vector()`、SIMD/SIMT VF 外调用。默认核内 DMA 依赖及结束等待由编译器生成，核间可见性须显式同步。
+GM↔UB 搬运须按 UB 端视图的布局预留空间。
 
-硬件约束：无显式 padding 仍可能发生固有 32B 补齐。Normal 模式逐 burst 补齐，Compact 模式在连续块合并区域末尾补齐。UB backing 容量、相邻区域复用、别名和同步须覆盖完整物理写入范围，不能只按逻辑 shape 推断；非对齐 scalar 路由按自身实际写入范围处理。不能依赖固有补齐初始化任意无效区域或读取越界 GM 数据。
+- 一维数据连续或二维各行紧密相接时，从 UB 视图起始地址算起，可用空间至少为有效数据总字节数按 32 字节向上对齐后的大小。补齐空间位于整块末尾。
+- 二维每行连续且行间留有空隙时，补齐空间位于各行末尾。UB 行距须为 32 字节的整数倍，且能容纳一行有效数据。每行均按该行距分配空间，包括最后一行。
 
-float64 不通过 TA native IR 校验。其他 dtype、布局组合、缓存策略的路由限制及执行域检查缺口见[待决项](../tracking/dma.md#dma-002)。
+将仅覆盖有效数据的视图作为 `dst`。逐行预留时，用 `tla.subview` 取各行的有效区域。
 
 **调用示例**
 
-前提：`x`、`y` 均指向连续的 64 个 float32 元素，使用 `(2, 32)` 布局，完整行宽为 128B。
+前提：`x` 指向连续的 60 个 float32 元素。UB 每行分配 32 个元素，前 30 个为有效数据，末尾 8 字节留给补齐。
 
 ```python
 @tla.jit
-def example(x, y):
+def example(x):
     with tla.scope.vector():
         tile = tla.alloc((2, 32), tl.float32)
+        dst = tla.subview(tile, offsets=(0, 0), sizes=(2, 30))
         p: tl.constexpr = tla.LoadGM2UBParams(l2_cache_ctrl=tla.L2CachePolicy.NORMAL_LV)
-        tla.load_gm_to_ub(tla.view(x, (2, 32)), tile, p)
-        tla.store_ub_to_gm(tile, tla.view(y, (2, 32)))
+        tla.load_gm_to_ub(tla.view(x, (2, 30)), dst, p)
 ```
 
 仓库测试：`tla_ut/dma/load_store.py`。
@@ -83,22 +84,19 @@ def example(x, y):
 
 签名：`tla.store_ub_to_gm(src, dst)`
 
-返回：None。更新已有的 GM 目标 Buffer，不返回旧值；返回不代表 DMA 已完成。
+返回：None。
 
 编译表示：hivm.hir.store。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 dst 相同 | 与 dst 的 rank、逻辑 shape 相同；源数据须已由相应生产者准备好。 | 必填 |
-| `dst` | 接收数据的目标缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 src 相同 | 目标视图须合法，不做类型转换。 | 必填 |
+| `src` | 待搬运的源缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：与 dst 相同（不含 `float64`） | 源地址需要32字节对齐。 | 必填 |
+| `dst` | 接收数据的目的缓冲区 | tla.buffer | 地址空间：GM<br>数据类型：与 src 相同 | 目的地址需要按照对应数据类型所占字节数对齐, 与 src 的 rank、逻辑 shape 相同。 | 必填 |
 
-本接口没有 `params`，不提供 `StoreUB2GMParams` 或逐次 store 的 `atomic_kind`。原子写回使用独立的 [tla.set_atomic](scalar.md#api-tla-set-atomic)，受控写回完成后用 NONE 显式复位；返回 None 或退出 scope 不代表完成和复位。
+原子写回使用独立的 [tla.set_atomic](scalar.md#api-tla-set-atomic)，受控写回完成后用 NONE 显式复位。
+本接口在`tla.scope.vector()`内、SIMD/SIMT VF 外区域调用。
 
-约束：两个参数须为 Buffer 视图，搬运范围由 shape/stride/offset 表达，不提供 padding 或 Tensor mask。只写有效区域时，使用 shape 一致的 UB 源视图和 GM 目标视图；shape 为编译期常量，暂不提供动态 size 写回。
-
-本接口在外围 `tla.scope.vector()`、SIMD/SIMT VF 外调用。默认核内 DMA 依赖及结束等待由编译器生成，核间可见性须显式同步。dtype、布局组合及执行域检查缺口见[待决项](../tracking/dma.md#dma-003)。
-
-`tla.copy(ub, gm)` 分发到同一路由，仅接受 `params=None`，非空配置在分发时拒绝。
+以 `src` 的起始地址和布局为准，按 [UB 容量和行距规则](#gm-ub-capacity) 预留空间。
 
 **调用示例**
 
