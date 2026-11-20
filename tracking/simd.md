@@ -18,7 +18,7 @@
 
 ## SIMD 枚举参数
 
-规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
+规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vlds / vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
 
 实现基线 `0227cde` / `d54604c` 中，PAT / ROUND / PART / POS 仍是字符串常量集合，新增枚举尚未提供。待前端补枚举定义、成员校验及字符串拒绝用例；本次仅更新规格，未修改代码或执行设备验证。
 
@@ -31,6 +31,51 @@
 mask 决定参与计算的输入；归约的结果位置始终写入，mode 控制其余位置。vcpadd 的结果写入前半部分，vsqz 的结果写入压缩后的前缀，MERGING 只保留各自尾部，不能按原输入 mask 覆盖有效结果。
 
 实现待跟进：通用 builder 的 MERGING 补零行为需改为保留输入；11 个接口需增加 merge；归约需补齐尾部处理，vcpadd / vsqz 需调整合并位置。此处是规格设计，不能视为代码或设备已支持。核对基线：TLA 0227cde、d54604c，以及 vcpadd / vsqz 所在的 aa927de；本次未运行编译或设备测试。
+
+<a name="simd-review-followup"></a>
+
+## SIMD 复查待办
+
+本轮补充规格、示例和测试引用；未修改实现或执行编译、设备测试。核对基线：TLA 0227cde / d54604c / aa927de，AVE bd228fae / bd88eea；公共测试链接固定到 074cf629。
+
+| 接口 | 尚需确认或补测 |
+| --- | --- |
+| pset | 旧前端 pset(64) 生成 32 个谓词元素，B64 数据向量却有 64 个；正文保留该限制，并给出 pge(64, 64) 的等长全真写法。M3 / M4 的逻辑排列需按目标补充，不能把枚举注释当作完整语义。 |
+| vcmp / vcmps | 保留现有 EQ / LT 默认值；“修改默认”的评审未给出目标值，待确认。补浮点特殊值与无符号比较边界。 |
+| vci / pge | 现有引用主要作为其他测试的辅助操作；需直接验证递增序列、谓词长度和 true/false 分布。 |
+| vcmax / vcmin | add_cmp.py 只核对 lane 0；新增 merge 和尾部规则尚无对应测试。 |
+| vmin / vmuls | 已改为公共专用测试；vmin.py 的 MERGING 参考值仍为补零，需按新规格更新。vmuls 的 float32 用例不能覆盖 B64 常量和标量拒绝规则。 |
+| vaddc / vsubc / vaddcs / vsubcs | 保留当前长度差异：vaddc 至多 64 元素，后三者要求满 64 元素；统一限制前先确认短向量需求。 |
+| vabs / vdiv | 最小负整数的绝对值、整数除零及最小负数除以 −1 的结果需按目标确认，不新增饱和或异常承诺。 |
+| vscatter | 仅补充写入及同步责任；readonly 声明、别名和写后重读问题继续跟踪，不能凭补屏障就认定修复。 |
+| vselr / dhistv2 / chistv2 | vselr 保留现有 uint16 范围；扩展类型和三者的最终主线入口、公开测试仍需确认。 |
+
+<a name="simd-vlds"></a>
+
+## tla.simd.vlds
+
+[查看规格](../spec/simd.md#api-tla-simd-vlds)
+
+按 TLA 0227cde 的 vlds → create_simd_vlds → AVE VFLoadOp 补充入口；单次返回一个向量。LOAD_DIST 枚举沿用规格设计，旧前端仍接收字符串。
+
+规格先列 NORM 和 BRC；UNPK、拆通道等分布的读取范围、填充位置和 elem 类型组合待单独定义。DINTLV 的双结果使用 vld2，谓词使用 pld。B64 返回 64 元素沿用 TLA 类型约定，但所查 AVE 直接 lowering 使用 v32i64，完整读写需专项验证。新增规格不代表这些路径已通过设备验收。
+
+结论：NORM / BRC 的 dtype、对齐和 B64 矩阵待补测；未对齐加载及 elem 与 buffer 不同型暂不纳入公开规格。
+
+<a name="simd-dsa-migration"></a>
+
+## DSA 接口替换
+
+| 原调用 | 对应接口 | 迁移时核对 |
+| --- | --- | --- |
+| vfull / vsplat | vdups | 输入是标量，不能直接改成接收向量的 vdupv；任意长度和 B64 类型覆盖须另核对。 |
+| vreduce_max | vcmax + vdupv | 多向量输入先逐元素 vmax 合并，再归约和广播。 |
+| vreduce_sum | vcadd | 核对 dtype；当前 vcadd 规格仅列 int32 / float32。 |
+| vbroadcast | vdupv | low 参数映射为 POS.LOWEST / HIGHEST。 |
+| vtruncf | vcvt | 核对 round、sat、part；FP8 不在当前 vcvt 支持范围。 |
+| vfma | vmula | 保留融合乘加的舍入语义。 |
+
+这些别名已从规格目录移除；DSA 调用迁移仍需在对应代码仓完成，本次未修改 DSA。
 
 <a name="simd-011"></a>
 
@@ -58,7 +103,7 @@ mask 决定参与计算的输入；归约的结果位置始终写入，mode 控�
 
 [vcadd 规格](../spec/simd.md#api-tla-simd-vcadd)
 
-入口已实现，复用既有 AVE ReductionOp。[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L2645) 与 [HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L767) 均规定返回同型向量，只有第 0 个 lane 是归约结果；不能承诺尾部为零或把内部扩宽当作公开返回类型。
+入口已实现，复用既有 AVE ReductionOp。[simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L2645) 与 [HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L767) 在该基线中返回同型向量，只有第 0 个 lane 保证为归约结果。新规格要求尾部按 [mode](#simd-mode-contract) 处理，仍待实现；内部扩宽不改变公开返回类型。
 
 [memory_completion.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L68) 目前覆盖 int32、float32；前端未限制其他 dtype，但不能据此声明完整执行支持。后续需补逐类型、溢出及浮点特殊值矩阵。
 
@@ -74,7 +119,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgadd 规格](../spec/simd.md#api-tla-simd-vcgadd)
 
-开发分支已提供独立的 AVE GroupReductionOp：Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3087)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
@@ -88,7 +133,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgmax 规格](../spec/simd.md#api-tla-simd-vcgmax)
 
-开发分支已提供独立的 AVE GroupReductionOp：Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3101)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
@@ -102,7 +147,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgmin 规格](../spec/simd.md#api-tla-simd-vcgmin)
 
-开发分支已提供独立的 AVE GroupReductionOp：Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3112)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
@@ -191,7 +236,10 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [查看规格](../spec/simd.md#api-tla-simd-vsts)
 
-- `dist`：按目标维护 dist × dtype × 地址对齐的设备矩阵，分别覆盖 packing、交错和通道合并，不能把某一分布用例外推至其他分布。
+- 规格明确 NORM 按元素写入、mask=false 保留内存；None 固定为 NORM_B32。ONEPT 仅规定 mask=None 时写 val[0]，其他 mask 行为待确认。
+- 公开数值存储规格移除 int1；按位存储使用 pst。不能仅凭 AVE 的 I1 类型约束推断 vsts 已定义谓词密度和写入范围。
+- 本轮规定 NORM 起点按 32 字节、ONEPT 按元素大小对齐；未对齐路径、B64 的 64 元素完整存储仍须按目标回归。
+- packing、交错、通道合并未列入本节支持范围；保留 dist × dtype × 对齐 × mask 的独立验收。scope/simd_only.py 只覆盖构建/编译，add_cmp.py 含 NORM_B32 和 ONEPT_B32 调用，不能代表完整矩阵。
 
 结论：待决。
 
@@ -271,9 +319,9 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 [查看规格](../spec/simd.md#api-tla-simd-vcpadd)
 
 - 实现已存在：`vcpadd(src, mask=None, mode=...)`，返回 `tla.vector`（原提案的 `-> tla,tensor` 是笔误）。
-- 语义为相邻 lane 配对求和：结果 lane `j < N/2` 为 `src[2j] + src[2j+1]`，其余 lane 为 0；只支持 f16/f32 满寄存器。
+- 旧基线 aa927de 的语义为相邻 lane 配对求和：结果 lane `j < N/2` 为 `src[2j] + src[2j+1]`，其余 lane 为 0；只支持 f16/f32 满寄存器。新规格的尾部处理见 [mode](#simd-mode-contract)，尚不能按旧实现关闭评审。
 
-结论：待决。规格已按实现补齐，请确认后关闭。
+结论：待决。需补齐 mode 实现及对应测试。
 
 <a name="simd-076"></a>
 
@@ -282,7 +330,8 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 [查看规格](../spec/simd.md#api-tla-simd-vusqz)
 
 - 原描述"拟将谓词展开为索引向量"与实现不符：实现返回排他前缀计数（结果 lane `i` 为索引小于 `i` 的活跃 lane 数）。
-- 实现签名 `vusqz(mask, dtype='u32')`，`dtype` 决定结果位宽与 lane 数。
+- aa927de 的默认 dtype 为字符串 u32；规格统一为 tl.uint32。前端已接受 tl.dtype，但默认值和字符串入口仍需统一。
+- 前端文档明确有符号结果使用相同位模式，规格据此说明 int8 的 128～255 计数显示为 −128～−1；设备需补 127/128/255 边界用例。
 
 结论：待决。规格已按实现更正，请确认后关闭。
 
