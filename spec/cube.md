@@ -14,14 +14,14 @@
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源缓冲区 | tla.buffer | UB；float16 / bfloat16 / float32 | 末维连续；有效起始地址、每行字节数及行间距按 32B 对齐。 | 必填 |
-| `dst` | 目标缓冲区 | tla.buffer | L1；类型与 src 相同 | 形状与 src 相容；有效起始地址、每行字节数及行间距按 32B 对齐。 | 必填 |
+| `src` | 源缓冲区 | tla.buffer | UB；float16 / bfloat16 / float32 | 末维连续；有效起始地址、每行字节数及行间距按 32B 对齐。带行间距的二维搬运中，行间距不小于每行元素数，且不超过 `floor(65535 / A) × A` 个元素，其中 `A = 32 / sizeof(dtype)`。 | 必填 |
+| `dst` | 目标缓冲区 | tla.buffer | L1；类型与 src 相同 | 形状与 src 相容；有效起始地址、每行字节数及行间距按 32B 对齐。带行间距的二维搬运中，行间距限制同 src。 | 必填 |
 
 **约束**
 
 - 地址：有效起始地址包含视图偏移；源、目的访问范围均不得超出各自分配。
-- 长度：每行元素数须为 `32 / sizeof(dtype)` 的整数倍，例如 float16 为 16、float32 为 8；带行间距的二维搬运，每行不超过 65535 个元素，行数不超过 8189。
-- 步长：源、目的行间距须为 `32 / sizeof(dtype)` 的整数倍，且不小于每行元素数；带行间距的二维搬运，行间距不超过 65535 个元素。
+- 长度：每行元素数须为 `32 / sizeof(dtype)` 的整数倍，例如 float16 为 16、float32 为 8；带行间距的二维搬运，行数不超过 8189。
+- 步长：源、目的行间距须为 `32 / sizeof(dtype)` 的整数倍，且不小于每行元素数。
 - 容量：含行间距的源、目的访问跨度分别不得超过实际可用 UB、L1 空间；不能仅按有效元素总数判断。
 - 同步：多个 AIV 写共享 L1 时，目的范围不得重叠；AIV 写入后供 AIC 读取前须建立跨核同步。
 - 填充：不提供 `pad_mode`、`pad_value`，不自动补齐非对齐数据。
@@ -146,7 +146,7 @@ def example(src, dst):
 | `src` | 累加结果 | tla.buffer | L0C；float32 | 四维矩阵分块；不得读取未初始化累加器。 | 必填 |
 | `dst` | 目的 | tla.buffer | L1；float32 / float16 / bfloat16 | 形状、布局与类型须符合本接口的组合限制。 | 必填 |
 | `params` | 搬运配置 | tla.FixpipeL0C2L1Params / None | 下列配置字段 | None 使用下列字段的默认值。 | None |
-| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
+| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求源、目的缓冲区连续，且目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
 | `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT：不转换；F322F16：float32 转 float16；F322BF16：float32 转 bfloat16 | 源为 float32；目的类型与转换模式对应，组合限制见下表。 | NO_QUANT |
 | `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU：不激活；NORMAL_RELU：负值置零 | 与所选目的模式及类型转换的组合见下表。 | NO_RELU |
 
@@ -192,7 +192,7 @@ def example(src, dst):
 | `src` | 累加结果 | tla.buffer | L0C；float32 | 四维矩阵分块；不得读取未初始化累加器。 | 必填 |
 | `dst` | 目的 | tla.buffer | GM；float32 / float16 / bfloat16 | 形状、布局与类型须符合本接口的组合限制。 | 必填 |
 | `params` | 搬运配置 | tla.FixpipeL0C2GMParams / None | 下列配置字段 | None 使用下列字段的默认值。 | None |
-| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
+| `params.dma_mode` | 目的布局 | tla.FixpipeDMAMode | NZ2ND：输出行顺序矩阵；NZ2DN：输出转置矩阵；NZ2NZ：保持分块存储 | 须与 dst 匹配；NZ2NZ 要求源、目的缓冲区连续，且目的行块跨度 M_dst*C_dst≤65535 个元素，默认块宽 C_dst=16 时 M_dst≤4080。 | NZ2NZ |
 | `params.pre_quant` | 类型转换 | tla.FixpipePreQuantMode | NO_QUANT：不转换；F322F16：float32 转 float16；F322BF16：float32 转 bfloat16 | 源为 float32；目的类型与转换模式对应，组合限制见下表。 | NO_QUANT |
 | `params.pre_relu` | 激活 | tla.FixpipePreReluMode | NO_RELU：不激活；NORMAL_RELU：负值置零 | 与所选目的模式及类型转换的组合见下表。 | NO_RELU |
 
