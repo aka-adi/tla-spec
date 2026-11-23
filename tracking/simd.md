@@ -18,9 +18,9 @@
 
 ## SIMD 枚举参数
 
-规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vlds / vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
+规格已将 PAT、ROUND、PART、POS 定为枚举，并为 vlds / vld2 / vsts / pld 的 dist、vunpack.pp、vdiv / vexp / vsqrt 的 precision 分别约定 LOAD_DIST / STORE_DIST / PRED_DIST、PP、PRECISION；membar.scope 使用 SCOPE 枚举。各接口仅接受参数表列出的成员；vsts.dist 和 precision 保留 None。
 
-实现基线 `0227cde` / `d54604c` 中，PAT / ROUND / PART / POS 仍是字符串常量集合，新增枚举尚未提供。待前端补枚举定义、成员校验及字符串拒绝用例；本次仅更新规格，未修改代码或执行设备验证。
+实现基线 `0227cde` / `d54604c` 中，PAT / ROUND / PART / POS 仍是字符串常量集合，membar.scope 仍接收字符串，新增枚举尚未提供。待前端补枚举定义、成员校验及字符串拒绝用例；本次仅更新规格，未修改代码或执行设备验证。
 
 <a name="simd-mode-contract"></a>
 
