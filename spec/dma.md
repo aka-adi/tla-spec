@@ -17,7 +17,8 @@
 | `src` | 源矩阵 | tla.buffer | GM；float16 / bfloat16 / float32 | 二维矩阵，末维连续；行间距不小于列数，访问范围不得越界。float32 的有效起始地址（含视图偏移）、行间距及每行搬运宽度均须按 32B 对齐，即行间距和每行元素数为 8 的整数倍。 | 必填 |
 | `dst` | 目标矩阵 | tla.buffer | L1；与 src 类型相同 | 连续分块存放；以 `C = 32 / sizeof(dtype)` 计，逻辑 `(M,N)` 对应形状 `(N/C,M/16,16,C)`；float32 的有效起始地址（含视图偏移）须按 32B 对齐。 | 必填 |
 | `params` | 搬运配置 | tla.LoadGM2L1Params / None | 下列字段 | None 使用默认配置。 | None |
-| `params.enable_nd2nz` | 启用矩阵装载所需的数据重排 | 编译期 bool | True | 不提供关闭转换的路径；False 抛出 NotImplementedError，非 bool 抛出 TypeError。 | True |
+| `params.l2_cache_ctrl` | MTE2 缓存模式 | 编译期 int 或 None | 目标支持的原生模式，包括 `0` 至 `4` | `None` 省略属性，后端使用 mode `0`；显式模式原样传递。 | None |
+| `params.mode` | 搬运模式 | tla.LoadGM2L1Mode | `ENABLE_ND2NZ` | 当前仅支持 ND→NZ。 | `ENABLE_ND2NZ` |
 
 **约束**
 
@@ -25,7 +26,7 @@
 - 分块：基本块为 `(16,C)`；例如 float16 的 C=16，float32 的 C=8。类型不同时不能直接沿用相同的分块形状。
 - 容量：目标总字节数 `M × N × sizeof(dtype)` 不得超过实际分配及可用 L1 空间；维度上限不代表最大矩阵可整体放入 L1。
 - 地址：源偏移、行间距与目标分块须描述同一逻辑矩阵，访问不得越界。
-- 转换：不改变元素类型，不提供反向转换、其他重排格式或非对齐尾块填充。
+- 转换：当前唯一支持的搬运模式为 ND→NZ。不改变元素类型，不提供反向转换、其他重排格式或非对齐尾块填充。
 - 同步：装载完成后才能由矩阵运算读取；复用 L1 缓冲区前须保证先前消费者完成。
 
 **调用示例**
