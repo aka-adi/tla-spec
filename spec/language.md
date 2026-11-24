@@ -111,32 +111,32 @@ def example(x):
 
 ## tla.range
 
-签名：`tla.range(arg1, arg2=None, step=None, num_stages=None, loop_unroll_factor=None, disallow_acc_multi_buffer=False, flatten=False, warp_specialize=False, disable_licm=False)`
+签名：`tla.range(arg1, arg2=None, step=None)`
 
-返回：用于 `for` 语句的运行期循环迭代器，循环在目标 IR 中保留，每轮迭代给出一个整数标量归纳变量。
+返回：用于 `for` 语句的运行期循环迭代器，每轮迭代给出一个整数标量归纳变量。
 
-与 `tl.range` 为同一对象，循环语义沿用 Triton 定义。
+与 `tl.range` 为同一对象。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `arg1` | 单参数时为结束值，多参数时为起始值 | int / tla.constexpr / 标量整数 tl.tensor | 有符号或无符号整数标量 | 只传一个参数时等价于 `tla.range(0, arg1)`。 | 必填 |
-| `arg2` | 结束值（不含） | 同 `arg1` | 同 `arg1` | 省略时 `arg1` 作为结束值。 | None |
-| `step` | 步长 | int / tla.constexpr / 标量整数 tl.tensor | 非零整数标量；运行时值须为正，负步长只支持编译期常量 | 编译期负步长会交换上下界并按正步长生成循环。 | 1 |
-| `num_stages` | 循环流水级数提示 | 编译期 int | 正整数 | 编译提示，是否生效由目标编译流水线决定。 | None |
-| `loop_unroll_factor` | 循环展开因子提示 | 编译期 int | 小于 2 表示不展开 | 编译提示；仓库用例验证取 2 时会写入循环属性。 | None |
-| `disallow_acc_multi_buffer` | 禁止点积累加器多缓冲 | 编译期 bool | False / True | 编译提示。 | False |
-| `flatten` | 展平以该循环为起点的循环嵌套 | 编译期 bool | False / True | 编译提示。 | False |
-| `warp_specialize` | 启用 warp 特化 | 编译期 bool | False / True | 面向 GPU 目标的提示，Ascend 目标不生效。 | False |
-| `disable_licm` | 禁止循环不变量外提 | 编译期 bool | False / True | 编译提示。 | False |
+| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr / 标量整数 tl.tensor | 整数标量 | 只传一个参数时等价于 `tla.range(0, arg1)`。 | 必填 |
+| `arg2` | 结束值（不含） | 同 `arg1` | 整数标量 | — | None |
+| `step` | 步长 | int / tla.constexpr / 标量整数 tl.tensor | 非零整数标量 | 运行时步长须为正。 | 1 |
 
-约束：上下界和步长必须为整数标量，归纳变量类型按三者做整型提升，`for` 的目标只能是一个变量。循环保留为运行期循环，不因边界为编译期常量而展开。除 `loop_unroll_factor` 外，各调度提示是否生效由目标编译流水线决定。可在 kernel 主体、Cube/Vector 任务和 SIMD 区域内使用。
+约束：
+
+- 上下界和步长可为编译期整数或运行时标量，归纳变量的类型取三者的整型提升结果。
+- 循环保留到目标 IR，边界为编译期常量时也不展开。
+- 负步长只接受编译期整数。
+- 不提供 num_stages、loop_unroll_factor 等调度提示参数。
+- 可在 kernel 主体、Vector 执行域和 SIMD 区域内使用。
 
 **调用示例**
 
 ```python
 @tla.jit
 def example(n):
-    for i in tla.range(1, n, 2, loop_unroll_factor=2):
+    for i in tla.range(1, n, 2):
         tla.device_print("runtime", i)
 ```
 
@@ -148,17 +148,21 @@ def example(n):
 
 签名：`tla.static_range(arg1, arg2=None, step=None)`
 
-返回：用于 `for` 语句的编译期迭代器，循环在编译期完全展开，每轮迭代的归纳变量为编译期整数。
+返回：用于 `for` 语句的编译期迭代器，每轮迭代的归纳变量为编译期整数。
 
-与 `tl.static_range` 为同一对象，循环语义沿用 Triton 定义。
+与 `tl.static_range` 为同一对象。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `arg1` | 单参数时为结束值，多参数时为起始值 | int / tla.constexpr | 编译期整数 | 只传一个参数时等价于 `tla.static_range(0, arg1)`。 | 必填 |
-| `arg2` | 结束值（不含） | int / tla.constexpr | 编译期整数 | 省略时 `arg1` 作为结束值。 | None |
-| `step` | 步长 | int / tla.constexpr | 非零编译期整数，可为负 | 省略时取 1。 | 1 |
+| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr | 编译期整数 | 只传一个参数时等价于 `tla.static_range(0, arg1)`。 | 必填 |
+| `arg2` | 结束值（不含） | int / tla.constexpr | 编译期整数 | — | None |
+| `step` | 步长 | int / tla.constexpr | 非零编译期整数，可为负 | — | 1 |
 
-约束：三个参数必须是编译期整数，传入运行时值会在前端断言失败。展开在前端完成，IR 中不保留循环，循环体按迭代次数重复生成，因此迭代次数应保持较小。可在 kernel 主体、Cube/Vector 任务和 SIMD 区域内使用。
+约束：
+
+- 三个参数都必须是编译期整数，传入运行时值会在前端断言失败。
+- 循环在前端完全展开，IR 中不保留循环，迭代次数不宜过大。
+- 可在 kernel 主体、Vector 执行域和 SIMD 区域内使用。
 
 **调用示例**
 
