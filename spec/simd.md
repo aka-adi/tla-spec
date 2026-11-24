@@ -1541,7 +1541,7 @@ def example(a_ub):
 
 ## tla.simd.vscatter
 
-签名：`tla.simd.vscatter(dst, indices, src, mask)`
+签名：`tla.simd.vscatter(src, dst, index, mask=None)`
 
 返回：None。
 
@@ -1549,14 +1549,14 @@ def example(a_ub):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `dst` | 目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B8：不支持<br>B16：不支持<br>B32：uint32<br>B64：不支持 | dst 必须为一维连续、零 offset 的 UB buffer。src、indices 固定 64 lanes。活跃索引不得重复或越界。 | 必填 |
-| `indices` | 索引向量 | tla.vector | 数据类型：<br>B32：uint32<br>lane 数：64 | 按元素计，活跃索引不得重复或越界。 | 必填 |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：uint32<br>B64：不支持 | dst 必须为一维连续、零 offset 的 UB buffer。src、indices 固定 64 lanes。活跃索引不得重复或越界。 | 必填 |
-| `mask` | 控制各 lane 是否启用的谓词 | tla.vector | 数据类型：<br>B1：int1<br>元素个数：64 | true 时写入对应元素；false 时不写，目标内存保留原值。 | 必填 |
+| `src` | 待写入的数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32 / float32<br>B64：不支持 | 满 64 个元素的寄存器；元素 dtype 与 `dst` 相同。 | 必填 |
+| `dst` | 写入目标缓冲区 | tla.buffer | 地址空间：UB<br>数据类型：<br>B8：不支持<br>B16：不支持<br>B32：int32 / uint32 / float32<br>B64：不支持 | 一维连续；元素 dtype 与 `src` 相同。 | 必填 |
+| `index` | 逐 lane 的元素偏移 | tla.vector | 数据类型：<br>B32：uint32<br>元素个数：64 | 单位为元素；活跃 lane 的索引须互异，且写入位置在缓冲区内。 | 必填 |
+| `mask` | 控制各 lane 是否写入 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：64 | None 生成全真 mask；false 的 lane 不写入，目标内存保留原值。 | None |
 
-活跃元素执行 `dst[indices[i]] = src[i]`；uint32 的字节地址为 `dst 起点 + 4 × indices[i]`。索引互异，写入不做原子合并。
+活跃 lane 执行 `dst[index[i]] = src[i]`，`index` 以元素计数。索引互异，写入不做原子合并。
 
-后续读写相同 UB 区域时须按流水依赖安排同步；本接口本身不执行屏障。
+后续读写相同 UB 区域时须按流水依赖安排同步；本接口本身不执行屏障，写后立即读需显式 `tla.simd.membar("VST_VLD")`。
 
 **调用示例**
 
@@ -1568,8 +1568,10 @@ def example(src_ub, indices_ub, dst_ub):
     with tla.scope.simd():
         values = tla.simd.vlds(src_ub[0])
         indices = tla.simd.vlds(indices_ub[0])
-        tla.simd.vscatter(dst_ub, indices, values, tla.simd.pset(32, dist=tla.simd.PAT.VL32))
+        tla.simd.vscatter(values, dst_ub, indices)
 ```
+
+仓库测试：[tla_ut/simd/memory_completion.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/memory_completion.py#L59)。
 
 <a name="api-tla-simd-vsel"></a>
 
