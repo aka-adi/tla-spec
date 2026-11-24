@@ -107,13 +107,77 @@ def example(x):
 
 仓库测试：[tla_ut/simd/add_cmp.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/add_cmp.py#L114)。
 
+<a name="api-tla-range"></a>
+
+## tla.range
+
+签名：`tla.range(arg1, arg2=None, step=None)`
+
+返回：用于 `for` 语句的运行期循环迭代器，每轮迭代给出一个整数标量归纳变量。
+
+与 `tl.range` 为同一对象。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr | 编译期整数 | 只传一个参数时等价于 `tla.range(0, arg1)`。 | 必填 |
+| `arg2` | 结束值（不含） | 同 `arg1` | 编译期整数 | — | None |
+| `step` | 步长 | int / tla.constexpr | 非零编译期整数，可为负 | — | 1 |
+
+约束：
+
+- 上下界和步长必须为编译期整数。
+- 循环保留到目标 IR，不展开。
+
+**调用示例**
+
+```python
+@tla.jit
+def example():
+    for i in tla.range(1, 9, 2):
+        tla.device_print("runtime", i)
+```
+
+仓库测试：[tla_ut/kernels/dsa/dsa_kernel.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/unittest/tla_ut/kernels/dsa/dsa_kernel.py#L149)。
+
+<a name="api-tla-static-range"></a>
+
+## tla.static_range
+
+签名：`tla.static_range(arg1, arg2=None, step=None)`
+
+返回：用于 `for` 语句的编译期迭代器，每轮迭代的归纳变量为编译期整数。
+
+与 `tl.static_range` 为同一对象。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr | 编译期整数 | 只传一个参数时等价于 `tla.static_range(0, arg1)`。 | 必填 |
+| `arg2` | 结束值（不含） | int / tla.constexpr | 编译期整数 | — | None |
+| `step` | 步长 | int / tla.constexpr | 非零编译期整数，可为负 | — | 1 |
+
+约束：
+
+- 三个参数都必须是编译期整数，传入运行时值会在前端断言失败。
+- 循环在前端完全展开，IR 中不保留循环，迭代次数不宜过大。
+
+**调用示例**
+
+```python
+@tla.jit
+def example():
+    for i in tla.static_range(4, 0, -2):
+        tla.device_print("unrolled", i)
+```
+
+仓库测试：[tla_ut/test_range.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/unittest/tla_ut/test_range.py#L15)。
+
 ## 范围说明
 
-以下条目在当前整理表中没有可定位的 TLA 接口名。
+以下条目在原整理表中没有单独的 TLA 接口入口，结论如下。
 
 | 原序号 | 范围结论 | 涉及场景 |
 | --- | --- | --- |
 | 216 | 规范不支持（triton里不能写break） | T.loop_break |
-| 217 | 暂不支持 | T.serial for i in range(n) |
-| 218 | 暂不支持 | T.unroll for i in tl.static_range(n) |
+| 217 | 由 [tla.range](#api-tla-range) 提供运行期循环 | T.serial for i in range(n) |
+| 218 | 由 [tla.static_range](#api-tla-static-range) 提供编译期展开 | T.unroll for i in tl.static_range(n) |
 | 219 | 暂不支持 | T.vectorized |
