@@ -225,6 +225,8 @@
 | [tla.truncmod](spec/language.md#api-tla-truncmod) | 待&#8288;转&#8288;测 | 计算向零截断除法的余数 | 未&#8288;登&#8288;记 | [math.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/math.py#L49) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
 | [tl.assume](spec/language.md#api-tl-assume) | 不&#8288;转&#8288;测 | 向编译器承诺条件成立 | 未&#8288;登&#8288;记 | [core.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/python/triton/language/core.py#L2950) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
 | [~~tla.where~~](spec/language.md#api-tla-where) | 不&#8288;需&#8288;要 | 根据标量条件或向量谓词做逐元素选择 | [已&#8288;关&#8288;闭](tracking/language.md#language-003) | [selection.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/language/tla/selection.py#L89) | 刘&#8288;鹏&#8288;程 | 丁&#8288;泓 |
+| [tla.range](spec/language.md#api-tla-range) | 待&#8288;转&#8288;测 | 构造运行期循环，可携带编译器提示 | 未&#8288;登&#8288;记 | [__init__.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/language/tla/__init__.py#L71) | 刘&#8288;鹏&#8288;程 | 刘&#8288;鹏&#8288;程 |
+| [tla.static_range](spec/language.md#api-tla-static-range) | 待&#8288;转&#8288;测 | 构造编译期完全展开的循环 | 未&#8288;登&#8288;记 | [__init__.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/language/tla/__init__.py#L71) | 刘&#8288;鹏&#8288;程 | 刘&#8288;鹏&#8288;程 |
 
 <a name="dtype-index"></a>
 
