@@ -37,7 +37,7 @@ GM↔UB 依据库上已有接口，以及 2026-11-18 的 `tla-programming-api.md
 - 执行域检查：wrapper 尚无统一 core/VF guard，须与 Vector 核级、VF 外契约一致；默认核内同步不代替显式核间协议。
 - dtype 与布局：各 dtype、stride、offset、fallback 及原子写回的组合约束待确认。
 
-结论：签名仅接收 src、dst，无配置对象或随路原子属性；copy 的 UB→GM 分发仅接受 `params=None`。原子模式由独立 [set_atomic](scalar.md#scalar-001) 控制，写回完成后显式 NONE 复位。上述 2 项待决。
+结论：签名仅接收 src、dst，无配置对象或随路原子属性；copy 的 UB→GM 分发仅接受 `params=None`。原子模式由独立 [set_atomic](../spec/scalar.md#api-tla-set-atomic) 控制，写回完成后显式 NONE 复位。上述 2 项待决。
 
 <a name="dma-004"></a>
 

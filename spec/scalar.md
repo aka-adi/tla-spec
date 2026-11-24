@@ -2,7 +2,7 @@
 
 [返回接口目录](../README.md)
 
-数值输入仅支持标量。以下示例中的标量计算放在 SIMD VF 外。参考版本的执行域检查范围见[评审说明](../tracking/scalar.md#scalar-version-scope)。
+数值输入仅支持标量。以下示例中的标量计算放在 SIMD VF 外。
 
 <a name="api-tla-set-atomic"></a>
 
@@ -41,6 +41,66 @@ def example(x, y):
 ```
 
 仓库测试：[tla_ut/dma/set_atomic.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/dma/set_atomic.py#L35)。
+
+<a name="api-tla-load-scalar"></a>
+
+## tla.load_scalar
+
+签名：`tla.load_scalar(buf)`
+
+返回：从 `buf` 读取的单个标量，dtype 与 `buf.dtype` 一致。
+
+编译表示：memref.load。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `buf` | 源缓冲区 | tla.buffer | 地址空间：GM / UB<br>数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 / float64 | 单元素 Buffer，各维尺寸须在编译期为 1。 | 必填 |
+
+在 SIMD VF 外调用。用 [tla.view](memory.md#api-tla-view) 从 GM 指针构造视图，或用 [tla.subview](memory.md#api-tla-subview) 从已有 Buffer 选取一个元素。偏移可为运行时整数，调用者须保证访问在范围内。
+
+**调用示例**
+
+```python
+@tla.jit
+def example(src, index):
+    with tla.scope.vector():
+        value = tla.load_scalar(tla.view(src, (1,), offsets=(index,)))
+```
+
+仓库测试：[tla_ut/dma/scalar_load.py](https://github.com/lbqg1234/triton-ascend/blob/f95044e5a3ac1174a0c343ac7c3e5e2fc7d66397/third_party/ascend/unittest/tla_ut/dma/scalar_load.py#L211)。
+
+<a name="api-tla-store-scalar"></a>
+
+## tla.store_scalar
+
+签名：`tla.store_scalar(buf, value)`
+
+返回：None。
+
+编译表示：memref.store。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `buf` | 目标缓冲区 | tla.buffer | 地址空间：GM / UB<br>数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 / float64 | 单元素 Buffer，各维尺寸须在编译期为 1。 | 必填 |
+| `value` | 写入值 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 / float64 | Python 标量按 Triton 规则确定 dtype。同类型直接写入，包括 bfloat16。类型不同时，按 [tla.cast](#api-tla-cast) 的数值转换规则转为目标类型。 | 必填 |
+
+在 SIMD VF 外调用。目标元素的选取和边界约束同 [tla.load_scalar](#api-tla-load-scalar)。
+
+**调用示例**
+
+前提：`src`、`dst` 均为 float32 GM 指针，且 `index` 在二者的有效范围内。
+
+```python
+@tla.jit
+def example(src, dst, index):
+    with tla.scope.vector():
+        ub = tla.alloc((4,), tl.float32)
+        slot = tla.subview(ub, offsets=(2,), sizes=(1,))
+        tla.store_scalar(slot, tla.load_scalar(tla.view(src, (1,), offsets=(index,))))
+        tla.store_scalar(tla.view(dst, (1,), offsets=(index,)), tla.load_scalar(slot))
+```
+
+仓库测试：[tla_ut/dma/scalar_load.py](https://github.com/lbqg1234/triton-ascend/blob/f95044e5a3ac1174a0c343ac7c3e5e2fc7d66397/third_party/ascend/unittest/tla_ut/dma/scalar_load.py#L211)。
 
 <a name="api-tla-select"></a>
 
@@ -124,7 +184,7 @@ def example(x, y):
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
 | `input` | 待转换的标量 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 / float64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 输入。不支持将 `float64` 数值转换为更窄的浮点类型。在 Ascend950 上，运行时 `float64` 转整数仅支持等宽 `bitcast`。 | 必填 |
-| `dtype` | 元素类型 | 编译期 tl.dtype | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 不接受 bfloat16。按源和目标类型对执行 Triton cast。 | 必填 |
+| `dtype` | 目标类型 | 编译期标量 tl.dtype | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 不接受 bfloat16。按源和目标类型对执行 Triton cast。 | 必填 |
 | `fp_downcast_rounding` | 浮点窄化舍入模式 | 编译期 str 或 None | None / rtne / rtz | 仅用于 Triton 支持的浮点窄化类型对。 | None |
 | `bitcast` | 是否按位重解释 | 编译期 bool | False / True | True 需要等位宽。 | False |
 
@@ -252,7 +312,7 @@ def example():
 | `b` | 第二个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
 | `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | NONE 下恰有一个输入为 NaN 的组合暂不支持；ALL 的语义是传播任一输入的 NaN。 | tl.PropagateNan.NONE |
 
-约束：float16 和 bfloat16 在类型提升前按原始操作数检查。双 NaN 的目标支持范围见[待决项](../tracking/scalar.md#scalar-012)。
+约束：float16 和 bfloat16 在类型提升前按原始操作数检查。
 
 **调用示例**
 
@@ -300,7 +360,7 @@ def example():
 | `b` | 第二个操作数 | 标量（bool / int / float） | 数据类型：<br>B1：int1<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32 / float32<br>B64：int64 / uint64 | 按 Triton 标量转换和类型提升处理。不接受 bfloat16 或 float16 输入。 | 必填 |
 | `propagate_nan` | 选择 NaN 传播规则 | 编译期 tl.PropagateNan | NONE / ALL | NONE 下恰有一个输入为 NaN 的组合暂不支持；ALL 的语义是传播任一输入的 NaN。 | tl.PropagateNan.NONE |
 
-约束：float16 和 bfloat16 在类型提升前按原始操作数检查。双 NaN 的目标支持范围见[待决项](../tracking/scalar.md#scalar-014)。
+约束：float16 和 bfloat16 在类型提升前按原始操作数检查。
 
 **调用示例**
 
