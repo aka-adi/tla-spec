@@ -119,28 +119,25 @@ def example(x):
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr / 标量整数 tl.tensor | 整数标量 | 只传一个参数时等价于 `tla.range(0, arg1)`。 | 必填 |
-| `arg2` | 结束值（不含） | 同 `arg1` | 整数标量 | — | None |
-| `step` | 步长 | int / tla.constexpr / 标量整数 tl.tensor | 非零整数标量 | 运行时步长须为正。 | 1 |
+| `arg1` | 起始值，单参数时为结束值 | int / tla.constexpr | 编译期整数 | 只传一个参数时等价于 `tla.range(0, arg1)`。 | 必填 |
+| `arg2` | 结束值（不含） | 同 `arg1` | 编译期整数 | — | None |
+| `step` | 步长 | int / tla.constexpr | 非零编译期整数，可为负 | — | 1 |
 
 约束：
 
-- 上下界和步长可为编译期整数或运行时标量，归纳变量的类型取三者的整型提升结果。
-- 循环保留到目标 IR，边界为编译期常量时也不展开。
-- 负步长只接受编译期整数。
-- 不提供 num_stages、loop_unroll_factor 等调度提示参数。
-- 可在 kernel 主体、Vector 执行域和 SIMD 区域内使用。
+- 上下界和步长必须为编译期整数。
+- 循环保留到目标 IR，不展开。
 
 **调用示例**
 
 ```python
 @tla.jit
-def example(n):
-    for i in tla.range(1, n, 2):
+def example():
+    for i in tla.range(1, 9, 2):
         tla.device_print("runtime", i)
 ```
 
-仓库测试：[tla_ut/test_range.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/unittest/tla_ut/test_range.py#L13)。
+仓库测试：[tla_ut/kernels/dsa/dsa_kernel.py](https://github.com/triton-lang/triton-ascend/blob/51b4e01ca5f6ec35304765856e6c9ce006e095cf/third_party/ascend/unittest/tla_ut/kernels/dsa/dsa_kernel.py#L149)。
 
 <a name="api-tla-static-range"></a>
 
@@ -162,7 +159,6 @@ def example(n):
 
 - 三个参数都必须是编译期整数，传入运行时值会在前端断言失败。
 - 循环在前端完全展开，IR 中不保留循环，迭代次数不宜过大。
-- 可在 kernel 主体、Vector 执行域和 SIMD 区域内使用。
 
 **调用示例**
 
