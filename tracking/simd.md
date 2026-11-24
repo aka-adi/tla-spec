@@ -26,11 +26,13 @@
 
 ## SIMD mode 语义
 
-规格统一为 ZEROING 填 0、MERGING 保留原值。逐元素算子保留第一个数据向量，累加算子保留 acc；转换、加载、标量广播及归约通过新增的可选 merge 参数提供保留值。merge 须与结果同型，MERGING 时必填，ZEROING 时为 None。
+ZEROING 将未写入位置填 0；MERGING 保留目标向量对应位置的原值，目标须已初始化且与结果同型。累加类的目标原值由 acc 提供。撤回此前额外添加的 11 个 merge 参数，以及普通算子自动保留第一个输入的约定。
 
 mask 决定参与计算的输入；归约的结果位置始终写入，mode 控制其余位置。vcpadd 的结果写入前半部分，vsqz 的结果写入压缩后的前缀，MERGING 只保留各自尾部，不能按原输入 mask 覆盖有效结果。
 
-实现待跟进：通用 builder 的 MERGING 补零行为需改为保留输入；11 个接口需增加 merge；归约需补齐尾部处理，vcpadd / vsqz 需调整合并位置。此处是规格设计，不能视为代码或设备已支持。核对基线：TLA 0227cde、d54604c，以及 vcpadd / vsqz 所在的 aa927de；本次未运行编译或设备测试。
+目标绑定仍待实现：普通 TLA 接口返回新向量，现有调用方式尚未提供旧目标的绑定；把返回值赋给同名 Python 变量不会自动保留旧值。绑定方式需另行评审，补齐后验证目标旧值与输入不同的掩码用例，以及归约、vcpadd / vsqz 的结果位置。本次只修规格，未修改前端或执行设备测试。
+
+依据：[TileLang b27c3ce 的 MERGING 转换](https://github.com/tile-ai/tilelang-mlir-ascend/blob/b27c3ce73f943a900755d838d23829b12edffd80/src/ascend/transform/legalize_simd_merging.cc#L79) 从可变赋值目标取得旧值；TLA 核对基线为 074cf629、d54604c、aa927de，尚不能据此宣称所有 mode 路径均已支持上述语义。
 
 <a name="simd-review-followup"></a>
 
@@ -43,8 +45,8 @@ mask 决定参与计算的输入；归约的结果位置始终写入，mode 控�
 | pset | 固定图样统一使用 pset。旧前端 pset(64) 生成 32 个谓词元素，B64 数据向量却有 64 个；64 元素全真谓词使用 pset(32, PAT.ALL)。需直接验证谓词长度和 true/false 分布，并补充 M3 / M4 的目标语义。 |
 | vcmp / vcmps | 保留现有 EQ / LT 默认值；“修改默认”的评审未给出目标值，待确认。补浮点特殊值与无符号比较边界。 |
 | vci | 现有引用主要作为其他测试的辅助操作；需直接验证递增序列。 |
-| vcmax / vcmin | add_cmp.py 只核对 lane 0；新增 merge 和尾部规则尚无对应测试。 |
-| vmin / vmuls | 已改为公共专用测试；vmin.py 的 MERGING 参考值仍为补零，需按新规格更新。vmuls 的 float32 用例不能覆盖 B64 常量和标量拒绝规则。 |
+| vcmax / vcmin | add_cmp.py 只核对 lane 0；目标绑定及未写入位置保留原值尚无对应测试。 |
+| vmin / vmuls | 已改为公共专用测试；vmin.py 的 MERGING 参考值仍为补零，需先补齐目标绑定，再验证保留目标旧值。vmuls 的 float32 用例不能覆盖 B64 常量和标量拒绝规则。 |
 | vaddc / vsubc / vaddcs / vsubcs | 保留当前长度差异：vaddc 至多 64 元素，后三者要求满 64 元素；统一限制前先确认短向量需求。 |
 | vabs / vdiv | 最小负整数的绝对值、整数除零及最小负数除以 −1 的结果需按目标确认，不新增饱和或异常承诺。 |
 | vscatter | 仅补充写入及同步责任；readonly 声明、别名和写后重读问题继续跟踪，不能凭补屏障就认定修复。 |

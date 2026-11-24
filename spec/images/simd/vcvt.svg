@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
   <title id="title">vcvt：类型转换、奇偶位置与 mask</title>
-  <desc id="desc">左图 float32 转 float16：源 a、b、c、d，mask 为 1、0、1、1；转换后的 a、c、d 写入选定奇偶位置。右图 float16 转 float32：源 a 至 h，mask 为 1、1、0、1、1、0、1、1；EVEN 读取 a、c、e、g，ODD 读取 b、d、f、h，禁用源对应的结果不写入。灰格在 ZEROING 下填零，在 MERGING 下保留 merge 对应位置。</desc>
+  <desc id="desc">左图 float32 转 float16：源 a、b、c、d，mask 为 1、0、1、1；转换后的 a、c、d 写入选定奇偶位置。右图 float16 转 float32：源 a 至 h，mask 为 1、1、0、1、1、0、1、1；EVEN 读取 a、c、e、g，ODD 读取 b、d、f、h，禁用源对应的结果不写入。灰格在 ZEROING 下填零，在 MERGING 下保留已初始化目标对应位置的原值。</desc>
   <style>
     text { font-family: Arial, "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; fill: #191919; font-size: 26px; }
     .value { fill: #FFFFFF; }
@@ -172,5 +172,5 @@
   <text x="784" y="488" text-anchor="end">ODD</text>
   <text x="640" y="558" text-anchor="middle" class="caption">vcvt：位置选择与源 mask（仅展示向量开头）</text>
   <text x="640" y="591" text-anchor="middle" class="note">a′ 为转换后的 a；mask 中 1 = true，0 = false。</text>
-  <text x="640" y="619" text-anchor="middle" class="note">灰格：ZEROING 填 0；MERGING 保留 merge 的对应位置。</text>
+  <text x="640" y="619" text-anchor="middle" class="note">灰格：ZEROING 填 0；MERGING 保留已初始化目标对应位置的原值。</text>
 </svg>
