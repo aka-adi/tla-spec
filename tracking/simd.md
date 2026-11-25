@@ -28,11 +28,13 @@
 
 ZEROING 将未写入位置填 0；MERGING 保留目标向量对应位置的原值，目标须已初始化且与结果同型。累加类的目标原值由 acc 提供。撤回此前额外添加的 11 个 merge 参数，以及普通算子自动保留第一个输入的约定。
 
-mask 决定参与计算的输入；归约的结果位置始终写入，mode 控制其余位置。vcpadd 的结果写入前半部分，vsqz 的结果写入压缩后的前缀，MERGING 只保留各自尾部，不能按原输入 mask 覆盖有效结果。
+mask 决定参与计算的输入；归约的结果位置始终写入，mode 控制其余位置。vcpadd 的结果写入前半部分且后半部分恒为 0，vsqz 的结果写入压缩后的前缀且未用尾部为 0，两者的 mode 都不做尾部保留合并。
 
 目标绑定仍待实现：普通 TLA 接口返回新向量，现有调用方式尚未提供旧目标的绑定；把返回值赋给同名 Python 变量不会自动保留旧值。绑定方式需另行评审，补齐后验证目标旧值与输入不同的掩码用例，以及归约、vcpadd / vsqz 的结果位置。本次只修规格，未修改前端或执行设备测试。
 
 依据：[TileLang b27c3ce 的 MERGING 转换](https://github.com/tile-ai/tilelang-mlir-ascend/blob/b27c3ce73f943a900755d838d23829b12edffd80/src/ascend/transform/legalize_simd_merging.cc#L79) 从可变赋值目标取得旧值；TLA 核对基线为 074cf629、d54604c、aa927de，尚不能据此宣称所有 mode 路径均已支持上述语义。
+
+vcpadd / vsqz 不在此列：vcpadd 的实现只接受 MODE.ZEROING（传 MERGING 抛 ValueError），vsqz 的 mode 是硬件 `squeeze_store` 选择位（STORED / NO_STORED）而非写模式，两者都不做尾部保留合并，规格已按实现更正。核对基线：TLA 0227cde、d54604c，以及 vcpadd / vsqz 所在的 d89bcb4f2；本次未运行编译或设备测试。
 
 <a name="simd-review-followup"></a>
 
@@ -323,7 +325,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 - 实现已存在：`vcpadd(src, mask=None, mode=...)`，返回 `tla.vector`（原提案的 `-> tla,tensor` 是笔误）。
 - 旧基线 aa927de 的语义为相邻 lane 配对求和：结果 lane `j < N/2` 为 `src[2j] + src[2j+1]`，其余 lane 为 0；只支持 f16/f32 满寄存器。新规格的尾部处理见 [mode](#simd-mode-contract)，尚不能按旧实现关闭评审。
 
-结论：待决。需补齐 mode 实现及对应测试。
+结论：已解决。实现只接受 MODE.ZEROING（MERGING 报错），规格按实现更正为仅 ZEROING、后半部分恒为 0；保留旧值需显式 `tla.simd.vsel`。
 
 <a name="simd-076"></a>
 

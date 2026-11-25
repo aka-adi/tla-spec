@@ -2347,17 +2347,17 @@ def example(a_ub, b_ub):
 
 签名：`tla.simd.vcpadd(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：tla.vector，lane 数与 `src` 相同。
+返回：与 `src` 同 dtype、同 lane 数的向量；前 N/2 个 lane 为相邻两 lane 之和，后半部分为 0。
 
 编译表示：ave.hir.vcpadd。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B16：float16<br>B32：float32 | 必须为满寄存器：float16 取 128 lanes，float32 取 64 lanes。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B16：float16<br>B32：float32 | 必须为满寄存器：float16 取 128 个元素，float32 取 64 个元素。 | 必填 |
 | `mask` | 控制各源 lane 是否参与相加 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 `src` 一致 | None 生成全真 mask；未选中的输入 lane 按 0 参与。 | None |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。相加结果写入前半部分，mode 控制后半部分。 | MODE.ZEROING |
+| `mode` | 写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | 传 MODE.MERGING 抛 ValueError：本指令没有可作保留值的结果型操作数。需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
 
-每两个相邻输入相加，mask 为 false 的输入按 0 参与；结果依次写入前半部分。后半部分在 ZEROING 模式下填 0，在 MERGING 模式下保留已初始化目标对应位置的原值。
+设寄存器有 N 个元素：结果元素 `j`（`j < N/2`）为 `src[2j] + src[2j+1]`，mask 为 false 的输入按 0 参与。后半部分（元素 `N/2` 至 `N-1`）恒为 0，不随 mode 变化。
 
 **调用示例**
 
@@ -2372,25 +2372,25 @@ def example(a_ub, out_ub):
         tla.simd.vsts(out_ub[0], sums, dist=tla.simd.STORE_DIST.NORM_B32)
 ```
 
-仓库测试：[tla_ut/simd/vcpadd.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/vcpadd.py#L13)。
+仓库测试：[tla_ut/simd/vcpadd.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/vcpadd.py#L63)。
 
 <a name="api-tla-simd-vsqz"></a>
 
 ## tla.simd.vsqz
 
-签名：`tla.simd.vsqz(src, mask, mode=tla.simd.MODE.ZEROING)`
+签名：`tla.simd.vsqz(src, mask, mode=tla.simd.SQUEEZE_STORE.STORED)`
 
-返回：tla.vector，lane 数与 `src` 相同。
+返回：与 `src` 同 dtype、同 lane 数的向量；活跃元素按原顺序写入前 count 个 lane，其余 lane 为 0。
 
-编译表示：ave.hir.vsqz（`squeeze_store` 固定为 `STORED`）。
+编译表示：ave.hir.vsqz（`squeeze_store` 由 `mode` 决定）。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 待压缩的源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32 | 必须为满寄存器：8 位 256 lanes、16 位 128 lanes、32 位 64 lanes。 | 必填 |
+| `src` | 待压缩的源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32 | 必须为满寄存器：8 位 256 个元素、16 位 128 个、32 位 64 个。 | 必填 |
 | `mask` | 选择活跃 lane 的谓词 | tla.vector | 数据类型：<br>B1：int1<br>元素个数：与 `src` 相同 | 必填，不接受 None。 | 必填 |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。mode 只控制压缩结果之后的尾部。 | MODE.ZEROING |
+| `mode` | 硬件 `squeeze_store` 选择位 | 编译期 tla.simd.SQUEEZE_STORE 枚举 | SQUEEZE_STORE.STORED / SQUEEZE_STORE.NO_STORED | 原样传给硬件操作数，不是 ZEROING / MERGING 写模式；Ascend950 上两者返回相同的压缩结果，未使用的尾部元素均为 0。 | SQUEEZE_STORE.STORED |
 
-mask 为 true 的元素按原顺序压到向量前端。尾部在 ZEROING 模式下填 0，在 MERGING 模式下保留已初始化目标对应位置的原值；不再按原 mask 覆盖压缩结果。
+稳定压缩：设 mask 中为真的 lane 数为 count，结果元素 `0` 至 `count-1` 依次为这些 lane 的源值，元素 `count` 至 `N-1` 为 0。压缩结果与 `mode` 无关。
 
 **调用示例**
 
@@ -2404,7 +2404,7 @@ def example(a_ub):
         result = tla.simd.vsqz(a, tla.simd.pset(32, dist=tla.simd.PAT.VL32))
 ```
 
-仓库测试：[tla_ut/simd/vsqz.py](https://github.com/triton-lang/triton-ascend/blob/aa927de3356e671160f2b3cf29fe23b6072f2b16/third_party/ascend/unittest/tla_ut/simd/vsqz.py#L13)。
+仓库测试：[tla_ut/simd/vsqz.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/vsqz.py#L75)。
 
 <a name="api-tla-simd-vusqz"></a>
 
