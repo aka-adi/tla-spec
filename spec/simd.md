@@ -1691,6 +1691,39 @@ def example(a_ub):
 
 仓库测试：[tla_ut/simd/vshift.py](https://github.com/triton-lang/triton-ascend/blob/074cf62907f815694a01e5cdc4ac78a90610ae82/third_party/ascend/unittest/tla_ut/simd/vshift.py#L85)。
 
+<a name="api-tla-simd-vshrs"></a>
+
+## tla.simd.vshrs
+
+签名：`tla.simd.vshrs(src, scalar, mask=None, mode=tla.simd.MODE.ZEROING)`
+
+返回：与 `src` 同 dtype、同元素个数的向量，每个元素为 `src[i] >> scalar`。
+
+编译表示：ave.hir.vshrs。
+
+| 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
+| --- | --- | --- | --- | --- | --- |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8<br>B16：int16 / uint16<br>B32：int32 / uint32<br>B64：不支持 | 每个向量最多包含：B8 256 个元素、B16 128 个元素、B32 64 个元素。 | 必填 |
+| `scalar` | 广播给各 lane 的移位量 | int / 标量整数 tl.tensor | 编译期值：−32768 至 32767 | 必须为 Python 数值或 rank-0 `tl.tensor`；最终物化为 `src` 的元素类型，非整数标量或超出 int16 范围直接报错。运行时标量不做范围检查。正常位移量按元素位宽取 0 至 B−1。 | 必填 |
+| `mask` | 控制各 lane 是否启用的谓词 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 `src` 相同 | None 生成全真 mask。 | None |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。 | MODE.ZEROING |
+
+有符号 `int8` / `int16` / `int32` 执行算术右移（补符号位），无符号 `uint8` / `uint16` / `uint32` 执行逻辑右移（补 0）；结果保持源类型，不做扩宽或饱和。
+
+**调用示例**
+
+输入为各含 64 个 int32 元素的连续 UB 缓冲区。
+
+```python
+@tla.jit
+def example(a_ub):
+    with tla.scope.simd():
+        a = tla.simd.vlds(a_ub[0])
+        result = tla.simd.vshrs(a, 3)
+```
+
+仓库测试：[tla_ut/simd/vshrs.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/vshrs.py#L74)。
+
 <a name="api-tla-simd-vshr"></a>
 
 ## tla.simd.vshr

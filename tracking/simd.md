@@ -370,3 +370,16 @@ AVE 通过现有寄存器操作展开索引并调用 masked gather，因此旧�
 - 待办：前端补 `class SCOPE` 及取值校验（非法值报错）；补完后规格无需再改。
 
 结论：待决。
+
+<a name="simd-082"></a>
+
+## SIMD-082 · tla.simd.vshrs
+
+[规格](../spec/simd.md#api-tla-simd-vshrs)
+
+移位量取标量，按 `ave.hir.vshrs` lowering；有符号为算术右移、无符号为逻辑右移，结果保持源类型，不扩宽、不饱和。
+
+覆盖 int8 / uint8 / int16 / uint16 / int32 / uint32 的满寄存器形态；`mask` 可省略，`mode` 支持 ZEROING（未写入位置填 0）与 MERGING（保留已初始化目标对应位置的原值）。
+
+依据：[simd.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/language/tla/simd.py#L1468) 与 [vshrs.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/vshrs.py#L74)（PR #3160 合入 `main-dev` 的 `d89bcb4f2`）。本次只补规格，未新增编译或设备测试。
+
