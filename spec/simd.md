@@ -1606,27 +1606,37 @@ def example(a_ub, b_ub):
 
 ## tla.simd.vselr
 
-签名：`tla.simd.vselr(src, indices)`
+签名：`tla.simd.vselr(src, index, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：tla.vector。
+返回：与 `src` 同 dtype、同元素个数的满寄存器向量；`result[i] = src[index[i]]`，mask 为假的元素写 0。
+
+编译表示：ave.hir.vselr。
 
 | 参数名 | 参数含义 | 参数类型 | 合法参数范围 | 其他约束 | 默认值 |
 | --- | --- | --- | --- | --- | --- |
-| `src` | 源数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：uint16<br>B32：不支持<br>B64：不支持 | 两个输入均为 128 lanes。索引表示源 lane。 | 必填 |
-| `indices` | 索引向量 | tla.vector | 数据类型：<br>B16：uint16<br>lane 数：128<br>正常索引：0 至 127 | 按源向量 lane 编号寻址。 | 必填 |
+| `src` | 源数据 | tla.vector | 数据类型：<br>B8：int8 / uint8 / float8e4m3fn / float8e5m2<br>B16：int16 / uint16 / float16 / bfloat16<br>B32：int32 / uint32 / float32<br>B64：不支持 | 必须为满寄存器：B8 256 个元素、B16 128 个、B32 64 个。 | 必填 |
+| `index` | 逐 lane 的源索引 | tla.vector | 数据类型：<br>B8：uint8<br>B16：uint16<br>B32：uint32 | 位宽与 `src` 元素一致，元素个数与 `src` 相同；每个索引须在 `[0, N)` 内，包括被 mask 屏蔽的 lane；允许重复索引。由有符号整型提供时按无符号位模式解释。 | 必填 |
+| `mask` | 控制各 lane 是否写出 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 `src` 相同 | None 生成全真 mask；为假的 lane 写 0。 | None |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | MERGING 不支持：该指令没有可作保留值的结果型操作数；需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
+
+按索引把源寄存器的 lane 搬到目标 lane，纯寄存器内重排、不访问 UB，也不更新地址。浮点按位搬运，NaN 载荷、正负零和无穷值原样保留；索引越界属未定义行为，前端不做运行时检查。
+
+TileLang-Ascend 的同名接口是 `vselr(src, index)` 两参形式，等价于本规格取 `mask=None`、`mode=MODE.ZEROING`；其 `float32` 通过等宽无符号整型位重解释实现。
 
 **调用示例**
 
-输入及索引均为 128 个 uint16 元素，索引位于 0–127。
+输入为 64 个 int32 元素、索引为同宽无符号向量。
 
 ```python
 @tla.jit
-def example(src_ub, indices_ub):
+def example(src_ub, index_ub):
     with tla.scope.simd():
         values = tla.simd.vlds(src_ub[0])
-        indices = tla.simd.vlds(indices_ub[0])
+        indices = tla.simd.vlds(index_ub[0])
         result = tla.simd.vselr(values, indices)
 ```
+
+仓库测试：[tla_ut/simd/vselr.py](https://github.com/triton-lang/triton-ascend/blob/d89bcb4f2abbcbe1c7a3ae0e3b989eb7224de20c/third_party/ascend/unittest/tla_ut/simd/vselr.py#L126)。
 
 <a name="api-tla-simd-vshl"></a>
 
