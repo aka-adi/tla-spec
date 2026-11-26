@@ -395,7 +395,7 @@ def example(a_ub, b_ub):
 
 签名：`tla.simd.vcadd(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：与 src 同 dtype、同 lane 数的向量；第 0 个元素为求和结果，其余位置由 mode 决定。
+返回：与 src 同 dtype、同 lane 数的向量；第 0 个元素为求和结果，其余位置为 0。
 
 编译表示：ave.hir.reduction。
 
@@ -403,9 +403,9 @@ def example(a_ub, b_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 待求和的数据 | tla.vector | 数据类型：<br>B32：int32 / float32<br>lane 数：64 | 本节仅确认 int32 / float32；其他类型的支持范围待确认。 | 必填 |
 | `mask` | 选择参与计算的元素 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：64 | None 表示全部启用。 | None |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。第 0 个元素始终写入归约结果。 | MODE.ZEROING |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | MERGING 不支持：该指令没有可作保留值的结果型操作数（CCE intrinsic 只接受 MODE_ZEROING）。需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
 
-对 mask 为真的所有源元素求和，结果放在第 0 个 lane。其余位置在 ZEROING 模式下填 0，在 MERGING 模式下保留已初始化目标对应位置的原值。返回类型不扩宽；浮点结果遵循目标归约顺序，不保证与逐元素顺序累加逐位一致。
+对 mask 为真的所有源元素求和，结果放在第 0 个 lane。其余位置填 0。返回类型不扩宽；浮点结果遵循目标归约顺序，不保证与逐元素顺序累加逐位一致。
 
 Ascend960 / A6 的设备支持范围待确认。
 
@@ -429,7 +429,7 @@ def example(x_ub):
 
 签名：`tla.simd.vcgadd(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：满寄存器向量，前 8 个元素为各组结果，其余位置由 mode 决定。
+返回：满寄存器向量，前 8 个元素为各组结果，其余位置为 0。
 
 编译表示：ave.hir.group_reduction。
 
@@ -437,7 +437,7 @@ def example(x_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 待分组归约的数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持<br>lane 数：16 位为 128，32 位为 64 | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
 | `mask` | 选择参与计算的元素 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。前 8 个元素始终写入各组结果。 | MODE.ZEROING |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | MERGING 不支持：该指令没有可作保留值的结果型操作数（CCE intrinsic 只接受 MODE_ZEROING）。需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
 
 仅支持 Ascend950；Ascend960 报不支持。把源寄存器分成 8 个连续的 32 字节组，每组独立求和：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
 
@@ -463,7 +463,7 @@ def example(x_ub):
 
 签名：`tla.simd.vcgmax(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：满寄存器向量，前 8 个元素为各组结果，其余位置由 mode 决定。
+返回：满寄存器向量，前 8 个元素为各组结果，其余位置为 0。
 
 编译表示：ave.hir.group_reduction。
 
@@ -471,7 +471,7 @@ def example(x_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 待分组归约的数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持<br>lane 数：16 位为 128，32 位为 64 | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
 | `mask` | 选择参与计算的元素 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。前 8 个元素始终写入各组结果。 | MODE.ZEROING |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | MERGING 不支持：该指令没有可作保留值的结果型操作数（CCE intrinsic 只接受 MODE_ZEROING）。需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
 
 仅支持 Ascend950；Ascend960 报不支持。把源寄存器分成 8 个连续的 32 字节组，每组独立取最大值：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
 
@@ -497,7 +497,7 @@ def example(x_ub):
 
 签名：`tla.simd.vcgmin(src, mask=None, mode=tla.simd.MODE.ZEROING)`
 
-返回：满寄存器向量，前 8 个元素为各组结果，其余位置由 mode 决定。
+返回：满寄存器向量，前 8 个元素为各组结果，其余位置为 0。
 
 编译表示：ave.hir.group_reduction。
 
@@ -505,7 +505,7 @@ def example(x_ub):
 | --- | --- | --- | --- | --- | --- |
 | `src` | 待分组归约的数据 | tla.vector | 数据类型：<br>B8：不支持<br>B16：int16 / uint16 / float16<br>B32：int32 / uint32 / float32<br>B64：不支持<br>lane 数：16 位为 128，32 位为 64 | 必须是完整 256 字节寄存器；不支持 int8 / uint8 / bfloat16 / int64 / uint64。 | 必填 |
 | `mask` | 选择参与计算的元素 | tla.vector / None | 数据类型：<br>B1：int1<br>元素个数：与 src 相同，16 位输入为 128，32 位为 64 | None 表示全部启用。 | None |
-| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | MODE.ZEROING / MODE.MERGING | ZEROING：未写入位置填 0；MERGING：保留目标向量对应位置的原值，目标须已初始化。前 8 个元素始终写入各组结果。 | MODE.ZEROING |
+| `mode` | 未写入位置的处理方式 | 编译期 tla.simd.MODE 枚举 | 仅 MODE.ZEROING | MERGING 不支持：该指令没有可作保留值的结果型操作数（CCE intrinsic 只接受 MODE_ZEROING）。需要保留旧值时显式调用 `tla.simd.vsel`。 | MODE.ZEROING |
 
 仅支持 Ascend950；Ascend960 报不支持。把源寄存器分成 8 个连续的 32 字节组，每组独立取最小值：16 位数据每组 16 个元素，32 位数据每组 8 个元素。mask 控制源元素是否参与，不改变分组或结果位置。
 

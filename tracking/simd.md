@@ -113,7 +113,7 @@ mask 决定参与计算的输入；归约的结果位置始终写入，mode 控�
 
 A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，以及是否采用上述 Ascend960 / dav-920r1 路径。源码中的目标名称不能单独证明全部 A6 型号的支持；本次无 A6 编译或真卡结果。
 
-结论：vcadd 的公开语义可保留，AVE 已有多目标适配分支；设备覆盖及其他 dtype 待补，TLA 新入口主线合入仍待确认。
+结论：已解决。vcadd 的实现只接受 MODE.ZEROING，传 MODE.MERGING 抛 ValueError；CCE intrinsic 的 mode 也只允许 MODE_ZEROING。规格已去掉 MERGING，保留旧值需显式 `tla.simd.vsel`。
 
 <a name="simd-015"></a>
 
@@ -121,7 +121,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgadd 规格](../spec/simd.md#api-tla-simd-vcgadd)
 
-开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。该指令没有 dst 操作数，MERGING 在 CCE 指令层即被拒绝（`static_assert` 只允许 MODE_ZEROING），规格已去掉 MERGING。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3087)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
@@ -135,7 +135,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgmax 规格](../spec/simd.md#api-tla-simd-vcgmax)
 
-开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。该指令没有 dst 操作数，MERGING 在 CCE 指令层即被拒绝（`static_assert` 只允许 MODE_ZEROING），规格已去掉 MERGING。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3101)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
@@ -149,7 +149,7 @@ A6 需确认：具体产品对应的 target 枚举、CANN / 编译器版本，�
 
 [vcgmin 规格](../spec/simd.md#api-tla-simd-vcgmin)
 
-开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
+开发基线 d54604c / bd88eea 的 AVE GroupReductionOp 使用 Ascend950 的 8 个连续 32 字节组，前 8 个结果有效、尾部补零，mask 选择输入元素。新规格的 [MERGING 尾部保留](#simd-mode-contract) 仍待实现。该指令没有 dst 操作数，MERGING 在 CCE 指令层即被拒绝（`static_assert` 只允许 MODE_ZEROING），规格已去掉 MERGING。vcgadd 的 int16 / uint16 扩宽为 int32 / uint32；max / min 保持输入类型。
 
 [simd.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/language/tla/simd.py#L3112)、[HIVMAVEOps.td](https://gitcode.com/Ascend/AscendNPU-IR/blob/bd88eea996b49aee9898465b77815bb32f762bb6/bishengir/include/bishengir/Dialect/HIVMAVE/IR/HIVMAVEOps.td#L514) 与 [group_reduce.py](https://github.com/wzy1214/triton-ascend/blob/d54604c1133df2631c6b32d8649eea79c6b2c975/third_party/ascend/unittest/tla_ut/simd/group_reduce.py#L33) 相互对应。verifier 拒绝浮点输入配无符号 cast；Ascend960 当前明确不支持。浮点顺序、NaN、正负零及空 min/max 组遵循目标指令，未另行承诺跨硬件统一值。
 
